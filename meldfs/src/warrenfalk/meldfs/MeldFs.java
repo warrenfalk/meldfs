@@ -1,15 +1,11 @@
 package warrenfalk.meldfs;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.ArrayList;
 
-import warrenfalk.fuselaj.FileInfo;
 import warrenfalk.fuselaj.Filesystem;
 import warrenfalk.fuselaj.FilesystemException;
 import warrenfalk.fuselaj.Stat;
-import warrenfalk.fuselaj.example.ExampleFs.DirEntry;
-import warrenfalk.fuselaj.example.ExampleFs.Inode;
 
 public class MeldFs extends Filesystem {
 	File[] sources;
@@ -68,10 +64,13 @@ public class MeldFs extends Filesystem {
 	}
 	
 	private File getFile(String path) {
+		return new File("/dev/shm");
 		// TODO: implement
 	}
 	
 	private void statFile(File file, Stat stat) {
+		int rval = os_stat(file.getPath(), stat);
+		System.out.println("stat: ctime = " + stat.getCTime());
 		/* TODO: implement the following, perhaps support this with JNI in fuselaj
 		stat.putMode(inode.mode);
 		stat.putLinkCount(1);
