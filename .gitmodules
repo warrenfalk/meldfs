@@ -1,0 +1,3 @@
+[submodule "fuselaj"]
+	path = fuselaj
+	url = https://github.com/warrenfalk/fuselaj.git
