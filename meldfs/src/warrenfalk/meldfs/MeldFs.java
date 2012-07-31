@@ -116,7 +116,6 @@ public class MeldFs extends Filesystem {
 						SourceFs source = sources[index];
 						try {
 							Path p = source.root.resolve(dirpath);
-							FileSystem fs = FileSystems.getDefault();
 							if (Files.isDirectory(p)) {
 								try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
 									for (Path item : stream) {
