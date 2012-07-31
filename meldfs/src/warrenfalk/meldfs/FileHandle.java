@@ -7,7 +7,7 @@ import warrenfalk.fuselaj.FileInfo;
 
 public class FileHandle {
 	final long number;
-	final Object data;
+	Object data;
 	
 	private static AtomicLong nextHandle = new AtomicLong();
 	private static HashMap<Long,FileHandle> map = new HashMap<Long,FileHandle>();
