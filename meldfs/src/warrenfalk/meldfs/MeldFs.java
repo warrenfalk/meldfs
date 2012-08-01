@@ -52,14 +52,16 @@ public class MeldFs extends Filesystem {
 		// TODO: Debugging code follows
 		boolean debug = true;
 		FileSystem fs = FileSystems.getDefault();
-		Path mountPoint = fs.getPath("/dev/shm/test"); 
+		Path mountPoint = fs.getPath("/dev/shm/test");
+		if (!Files.exists(mountPoint))
+			Files.createDirectories(mountPoint);
 		Path[] devices = new Path[] {
-				fs.getPath("/media/aacbd496-ae23-4be4-8f12-ffb733c1dbfa/test/0"),
-				fs.getPath("/media/aacbd496-ae23-4be4-8f12-ffb733c1dbfa/test/1"),
-				fs.getPath("/media/aacbd496-ae23-4be4-8f12-ffb733c1dbfa/test/2"),
-				fs.getPath("/media/aacbd496-ae23-4be4-8f12-ffb733c1dbfa/test/3"),
-				fs.getPath("/media/aacbd496-ae23-4be4-8f12-ffb733c1dbfa/test/4"),
-				fs.getPath("/media/aacbd496-ae23-4be4-8f12-ffb733c1dbfa/test/5"),
+				fs.getPath("/home/warren/test/0"),
+				fs.getPath("/home/warren/test/1"),
+				fs.getPath("/home/warren/test/2"),
+				fs.getPath("/home/warren/test/3"),
+				fs.getPath("/home/warren/test/4"),
+				fs.getPath("/home/warren/test/5"),
 		};
 		//String options = "allow_other,use_ino,big_writes";
 		String options = "allow_other,big_writes";
