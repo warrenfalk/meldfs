@@ -105,7 +105,7 @@ public class MeldFs extends Filesystem {
 		FileHandle fh = FileHandle.get(fileInfo.getFileHandle());
 		String[] names;
 		if (fh.data instanceof String) {
-			final String dirpath = (String)fh.data;
+			final String dirpath = ((String)fh.data).substring(1);
 			final HashSet<String> items = new HashSet<String>();
 			final AtomicInteger sync = new AtomicInteger(sources.length);
 			for (int i = 0; i < sources.length; i++) {
