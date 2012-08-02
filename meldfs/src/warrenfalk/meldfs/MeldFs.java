@@ -79,7 +79,7 @@ public class MeldFs extends Filesystem {
 	protected void getattr(String path, Stat stat) throws FilesystemException {
 		try {
 			// attempt to find entry with that name
-			Path file = getFile(path);
+			Path file = getLatestFile(path);
 			if (file == null)
 				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 			os_stat(file.toAbsolutePath().toString(), stat);
@@ -90,9 +90,16 @@ public class MeldFs extends Filesystem {
 	}
 	
 	@Override
+	protected void mkdir(String path, int mode) throws FilesystemException {
+		// find which device contains the parent directory and create there
+		// if more than one device contains the parent, create on the device with the most recently modified
+		// TODO: implement
+	}
+	
+	@Override
 	protected void opendir(String path, FileInfo fi) throws FilesystemException {
 		try {
-			Path dir = getFile(path);
+			Path dir = getLatestFile(path);
 			if (!Files.isDirectory(dir))
 				throw new FilesystemException(Errno.NotADirectory);
 			FileHandle.open(fi, path);
@@ -166,7 +173,13 @@ public class MeldFs extends Filesystem {
 		FileHandle.release(fi);
 	}
 	
-	private Path getFile(final String path) throws InterruptedException {
+	/** Return the real path the the file if on one device, or the path to the most recently
+	 * modified version of the file if on multiple devices
+	 * @param path
+	 * @return
+	 * @throws InterruptedException
+	 */
+	private Path getLatestFile(final String path) throws InterruptedException {
 		final Path[] files = new Path[sources.length];
 		final long[] modTimes = new long[sources.length];
 		final AtomicInteger sync = new AtomicInteger(sources.length);
@@ -176,7 +189,7 @@ public class MeldFs extends Filesystem {
 				@Override
 				public void run() {
 					SourceFs source = sources[index];
-					Path sourceLoc = source.root.resolve(path);
+					Path sourceLoc = source.root.resolve(path.substring(1));
 					if (Files.exists(sourceLoc)) {
 						try {
 							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
