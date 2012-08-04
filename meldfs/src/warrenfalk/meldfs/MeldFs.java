@@ -2,14 +2,21 @@ package warrenfalk.meldfs;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -249,14 +256,61 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
-		// TODO: implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		Path realPath;
+		try {
+			realPath = getLatestFile(path);
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		try {
+			FileChannel channel = FileChannel.open(realPath, getJavaOpenOpts(fileInfo.getOpenFlags()));
+			FileHandle.open(fileInfo, channel);
+		}
+		catch (IOException ioe) {
+			throw new FilesystemException(ioe);
+		}
+	}
+	
+	private Set<? extends OpenOption> getJavaOpenOpts(int openFlags) {
+		HashSet<StandardOpenOption> set = new HashSet<StandardOpenOption>();
+		switch (openFlags & FileInfo.O_ACCMODE) {
+		case FileInfo.O_RDONLY:
+			set.add(StandardOpenOption.READ);
+			break;
+		case FileInfo.O_WRONLY:
+			set.add(StandardOpenOption.WRITE);
+			break;
+		case FileInfo.O_RDWR:
+			set.add(StandardOpenOption.READ);
+			set.add(StandardOpenOption.WRITE);
+			break;
+		}
+		if (0 != (openFlags & FileInfo.O_APPEND))
+			set.add(StandardOpenOption.APPEND);
+		if (0 != (openFlags & FileInfo.O_TRUNC))
+			set.add(StandardOpenOption.TRUNCATE_EXISTING);
+		if (0 != (openFlags & FileInfo.O_CREAT))
+			set.add(0 != (openFlags & FileInfo.O_EXCL) ? StandardOpenOption.CREATE_NEW : StandardOpenOption.CREATE);
+		if (0 != (openFlags & FileInfo.O_SYNC))
+			set.add(StandardOpenOption.SYNC);
+		if (0 != (openFlags & FileInfo.O_DSYNC))
+			set.add(StandardOpenOption.DSYNC);
+		return set;
 	}
 	
 	@Override
 	protected void read(Path path, FileInfo fileInfo, ByteBuffer buffer, long position) throws FilesystemException {
-		// TODO: implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		FileHandle fh = FileHandle.get(fileInfo.getFileHandle());
+		FileChannel channel = (FileChannel)fh.data;
+		try {
+			channel.read(buffer, position);
+		}
+		catch (IOException e) {
+			throw new FilesystemException(e);
+		}
 	}
 	
 	@Override
@@ -267,7 +321,7 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void release(Path path, FileInfo fi) throws FilesystemException {
-		// TODO: implement
+		FileHandle.release(fi);
 	}
 
 	/** Return the real path the the file if on one device, or the path to the most recently
