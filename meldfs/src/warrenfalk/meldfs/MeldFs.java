@@ -271,6 +271,102 @@ public class MeldFs extends FuselajFs {
 		}
 	}
 	
+	@Override
+	protected void create(final Path path, int mode, FileInfo fi) throws FilesystemException {
+		// when creating a file, first find the existing file if any
+		// if it exists, and if this is a create_new, then fail, otherwise overwrite that one
+		// if it doesn't exist, get the youngest parent and create one there
+		final Path parent = parentOf(path);
+		final Path[] files = new Path[sources.length];
+		final Path[] parents = new Path[sources.length];
+		final long[] modTimes = new long[sources.length];
+		final AtomicInteger sync = new AtomicInteger(sources.length);
+		for (int i = 0; i < sources.length; i++) {
+			final int index = i;
+			threadPool.execute(new Runnable() {
+				@Override
+				public void run() {
+					SourceFs source = sources[index];
+					Path sourceLoc = source.root.resolve(path);
+					if (Files.exists(sourceLoc)) {
+						try {
+							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+							files[index] = sourceLoc;
+						}
+						catch (IOException ioe) {
+							source.onIoException(ioe);
+						}
+					}
+					sourceLoc = source.root.resolve(parent);
+					if (Files.exists(sourceLoc)) {
+						try {
+							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+							parents[index] = sourceLoc;
+						}
+						catch (IOException ioe) {
+							source.onIoException(ioe);
+						}
+					}
+					if (0 == sync.decrementAndGet()) {
+						synchronized (sync) {
+							sync.notify();
+						}
+					}
+				}
+			});
+		}
+		try {
+			synchronized (sync) {
+				sync.wait();
+			}
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
+		// find the youngest existing file (if any), first
+		long max = 0L;
+		Path realPath = null;
+		for (int i = 0; i < sources.length; i++) {
+			Path file = files[i];
+			if (file == null)
+				continue;
+			long mod = modTimes[i];
+			if (mod > max) {
+				realPath = file;
+				max = mod;
+			}
+		}
+		if (realPath != null) {
+			if (0 != (fi.getOpenFlags() & FileInfo.O_EXCL))
+				throw new FilesystemException(Errno.FileExists);
+		}
+		else {
+			// no existing file, find the youngest parent
+			max = 0L;
+			Path openDir = null;
+			for (int i = 0; i < sources.length; i++) {
+				Path dir = parents[i];
+				if (dir == null)
+					continue;
+				long mod = modTimes[i];
+				if (mod > max) {
+					openDir = dir;
+					max = mod;
+				}
+			}
+			if (openDir == null)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			realPath = openDir.resolve(path.getFileName());
+		}
+		try {
+			FileChannel channel = FileChannel.open(realPath, getJavaOpenOpts(fi.getOpenFlags()));
+			FileHandle.open(fi, channel);
+		}
+		catch (IOException ioe) {
+			throw new FilesystemException(ioe);
+		}
+	}
+
 	private Set<? extends OpenOption> getJavaOpenOpts(int openFlags) {
 		HashSet<StandardOpenOption> set = new HashSet<StandardOpenOption>();
 		switch (openFlags & FileInfo.O_ACCMODE) {
