@@ -166,10 +166,10 @@ public class MeldFs extends FuselajFs {
 	
 	void runMultiSourceOperation(SourceOp operation) throws FilesystemException {
 		final AtomicInteger sync = new AtomicInteger(sources.length);
-		for (int i = 0; i < sources.length; i++)
-			threadPool.execute(new SourceOpRunner(operation, i, sources[i], sync));
 		try {
 			synchronized (sync) {
+				for (int i = 0; i < sources.length; i++)
+					threadPool.execute(new SourceOpRunner(operation, i, sources[i], sync));
 				sync.wait();
 			}
 		}

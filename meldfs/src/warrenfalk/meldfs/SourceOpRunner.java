@@ -18,10 +18,14 @@ public class SourceOpRunner implements Runnable {
 	
 	@Override
 	public void run() {
-		operation.run(index, source);
-		if (0 == sync.decrementAndGet()) {
-			synchronized (sync) {
-				sync.notify();
+		try {
+			operation.run(index, source);
+		}
+		finally {
+			if (0 == sync.decrementAndGet()) {
+				synchronized (sync) {
+					sync.notify();
+				}
 			}
 		}
 	}
