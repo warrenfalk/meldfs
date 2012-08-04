@@ -119,6 +119,11 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected void rmdir(Path path) throws FilesystemException {
+		// TODO Implement
+	}
+	
+	@Override
 	protected void opendir(Path path, FileInfo fi) throws FilesystemException {
 		try {
 			Path dir = getLatestFile(path);
