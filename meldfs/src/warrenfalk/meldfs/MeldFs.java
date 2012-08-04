@@ -259,6 +259,12 @@ public class MeldFs extends FuselajFs {
 		throw new FilesystemException(Errno.FunctionNotImplemented);
 	}
 	
+	@Override
+	protected void write(Path path, FileInfo fi, ByteBuffer bb, long offset) throws FilesystemException {
+		// TODO: implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
 	/** Return the real path the the file if on one device, or the path to the most recently
 	 * modified version of the file if on multiple devices
 	 * @param path
