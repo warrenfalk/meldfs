@@ -265,6 +265,11 @@ public class MeldFs extends FuselajFs {
 		throw new FilesystemException(Errno.FunctionNotImplemented);
 	}
 	
+	@Override
+	protected void release(Path path, FileInfo fi) throws FilesystemException {
+		// TODO: implement
+	}
+
 	/** Return the real path the the file if on one device, or the path to the most recently
 	 * modified version of the file if on multiple devices
 	 * @param path
