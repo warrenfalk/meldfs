@@ -412,14 +412,28 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void chown(Path path, int uid, int gid) throws FilesystemException {
-		// TODO Implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		try {
+			Path realPath = getLatestFile(path);
+			if (realPath == null)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			os_chown(realPath, uid, gid);
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
 	}
 	
 	@Override
 	protected void chmod(Path path, int mode) throws FilesystemException {
-		// TODO Implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		try {
+			Path realPath = getLatestFile(path);
+			if (realPath == null)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			os_chmod(realPath, mode);
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
 	}
 	
 	/** Return the real path the the file if on one device, or the path to the most recently
