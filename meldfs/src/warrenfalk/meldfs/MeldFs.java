@@ -1,6 +1,7 @@
 package warrenfalk.meldfs;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -248,6 +249,12 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
+		// TODO: implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
+	@Override
+	protected void read(Path path, FileInfo fileInfo, ByteBuffer buffer, long position) throws FilesystemException {
 		// TODO: implement
 		throw new FilesystemException(Errno.FunctionNotImplemented);
 	}
