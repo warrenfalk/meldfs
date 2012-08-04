@@ -409,7 +409,19 @@ public class MeldFs extends FuselajFs {
 	protected void release(Path path, FileInfo fi) throws FilesystemException {
 		FileHandle.release(fi);
 	}
-
+	
+	@Override
+	protected void chown(Path path, int uid, int gid) throws FilesystemException {
+		// TODO Implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
+	@Override
+	protected void chmod(Path path, int mode) throws FilesystemException {
+		// TODO Implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
 	/** Return the real path the the file if on one device, or the path to the most recently
 	 * modified version of the file if on multiple devices
 	 * @param path
