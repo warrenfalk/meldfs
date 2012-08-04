@@ -95,7 +95,7 @@ public class MeldFs extends FuselajFs {
 			os_stat(file.toAbsolutePath(), stat);
 		}
 		catch (InterruptedException ie) {
-			throw new FilesystemException(Errno.InterruptedSystemCall);
+			throw new FilesystemException(ie);
 		}
 	}
 	
@@ -115,7 +115,7 @@ public class MeldFs extends FuselajFs {
 			os_mkdir(dir, mode);
 		}
 		catch (InterruptedException ie) {
-			throw new FilesystemException(Errno.InterruptedSystemCall);
+			throw new FilesystemException(ie);
 		}
 	}
 	
@@ -162,7 +162,7 @@ public class MeldFs extends FuselajFs {
 				throw new FilesystemException(Errno.IOError);
 		}
 		catch (InterruptedException e) {
-			throw new FilesystemException(Errno.InterruptedSystemCall);
+			throw new FilesystemException(e);
 		}
 	}
 	
@@ -175,7 +175,7 @@ public class MeldFs extends FuselajFs {
 			FileHandle.open(fi, path);
 		}
 		catch (InterruptedException e) {
-			throw new FilesystemException(Errno.InterruptedSystemCall);
+			throw new FilesystemException(e);
 		}
 	}
 	
@@ -227,7 +227,7 @@ public class MeldFs extends FuselajFs {
 				}
 			}
 			catch (InterruptedException e) {
-				throw new FilesystemException(Errno.InterruptedSystemCall);
+				throw new FilesystemException(e);
 			}
 			names = items.toArray(new String[items.size()]);
 			Arrays.sort(names);
