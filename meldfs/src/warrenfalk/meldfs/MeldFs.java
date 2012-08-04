@@ -119,8 +119,50 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
-	protected void rmdir(Path path) throws FilesystemException {
-		// TODO Implement
+	protected void rmdir(final Path path) throws FilesystemException {
+		try {
+			final AtomicInteger sync = new AtomicInteger(sources.length);
+			final AtomicInteger found = new AtomicInteger(0);
+			final AtomicInteger deleted = new AtomicInteger(0);
+			for (int i = 0; i < sources.length; i++) {
+				final int index = i;
+				threadPool.execute(new Runnable() {
+					@Override
+					public void run() {
+						SourceFs source = sources[index];
+						Path sourceLoc = source.root.resolve(path);
+						if (Files.exists(sourceLoc)) {
+							found.incrementAndGet();
+							try {
+								os_rmdir(sourceLoc);
+								deleted.incrementAndGet();
+							}
+							catch (FilesystemException fs) {
+								// TODO: figure out what to do here.
+								// We've tried to remove one of the instances of the directory, but at least one failed for some reason
+							}
+						}
+						if (0 == sync.decrementAndGet()) {
+							synchronized (sync) {
+								sync.notify();
+							}
+						}
+							
+					}
+				});
+			}
+			synchronized (sync) {
+				sync.wait();
+			}
+			if (found.intValue() == 0)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			// TODO: we should probably return the error message from the os_rmdir that failed
+			if (found.intValue() != deleted.intValue())
+				throw new FilesystemException(Errno.IOError);
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(Errno.InterruptedSystemCall);
+		}
 	}
 	
 	@Override
