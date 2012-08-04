@@ -16,11 +16,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import warrenfalk.fuselaj.DirBuffer;
 import warrenfalk.fuselaj.Errno;
 import warrenfalk.fuselaj.FileInfo;
-import warrenfalk.fuselaj.Filesystem;
+import warrenfalk.fuselaj.FuselajFs;
 import warrenfalk.fuselaj.FilesystemException;
 import warrenfalk.fuselaj.Stat;
 
-public class MeldFs extends Filesystem {
+public class MeldFs extends FuselajFs {
 	SourceFs[] sources;
 	String[] fuseArgs;
 	ExecutorService threadPool;
@@ -76,13 +76,13 @@ public class MeldFs extends Filesystem {
 	}
 	
 	@Override
-	protected void getattr(String path, Stat stat) throws FilesystemException {
+	protected void getattr(Path path, Stat stat) throws FilesystemException {
 		try {
 			// attempt to find entry with that name
 			Path file = getLatestFile(path);
 			if (file == null)
 				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			os_stat(file.toAbsolutePath().toString(), stat);
+			os_stat(file.toAbsolutePath(), stat);
 		}
 		catch (InterruptedException ie) {
 			throw new FilesystemException(Errno.InterruptedSystemCall);
@@ -90,14 +90,14 @@ public class MeldFs extends Filesystem {
 	}
 	
 	@Override
-	protected void mkdir(String path, int mode) throws FilesystemException {
+	protected void mkdir(Path path, int mode) throws FilesystemException {
 		// find which device contains the parent directory and create there
 		// if more than one device contains the parent, create on the device with the most recently modified
 		// TODO: implement
 	}
 	
 	@Override
-	protected void opendir(String path, FileInfo fi) throws FilesystemException {
+	protected void opendir(Path path, FileInfo fi) throws FilesystemException {
 		try {
 			Path dir = getLatestFile(path);
 			if (!Files.isDirectory(dir))
@@ -110,11 +110,11 @@ public class MeldFs extends Filesystem {
 	}
 	
 	@Override
-	protected void readdir(String path, DirBuffer dirBuffer, FileInfo fileInfo) throws FilesystemException {
+	protected void readdir(Path path, DirBuffer dirBuffer, FileInfo fileInfo) throws FilesystemException {
 		FileHandle fh = FileHandle.get(fileInfo.getFileHandle());
 		String[] names;
-		if (fh.data instanceof String) {
-			final String dirpath = ((String)fh.data).substring(1);
+		if (fh.data instanceof Path) {
+			final Path dirpath = (Path)fh.data;
 			final HashSet<String> items = new HashSet<String>();
 			final AtomicInteger sync = new AtomicInteger(sources.length);
 			for (int i = 0; i < sources.length; i++) {
@@ -169,7 +169,7 @@ public class MeldFs extends Filesystem {
 	}
 	
 	@Override
-	protected void releasedir(String path, FileInfo fi) throws FilesystemException {
+	protected void releasedir(Path path, FileInfo fi) throws FilesystemException {
 		FileHandle.release(fi);
 	}
 	
@@ -179,7 +179,7 @@ public class MeldFs extends Filesystem {
 	 * @return
 	 * @throws InterruptedException
 	 */
-	private Path getLatestFile(final String path) throws InterruptedException {
+	private Path getLatestFile(final Path path) throws InterruptedException {
 		final Path[] files = new Path[sources.length];
 		final long[] modTimes = new long[sources.length];
 		final AtomicInteger sync = new AtomicInteger(sources.length);
@@ -189,7 +189,7 @@ public class MeldFs extends Filesystem {
 				@Override
 				public void run() {
 					SourceFs source = sources[index];
-					Path sourceLoc = source.root.resolve(path.substring(1));
+					Path sourceLoc = source.root.resolve(path);
 					if (Files.exists(sourceLoc)) {
 						try {
 							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
