@@ -379,6 +379,12 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected void unlink(Path path) throws FilesystemException {
+		// TODO implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
+	@Override
 	protected void release(Path path, FileInfo fi) throws FilesystemException {
 		FileHandle.release(fi);
 	}
