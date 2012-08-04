@@ -25,6 +25,8 @@ public class MeldFs extends FuselajFs {
 	String[] fuseArgs;
 	ExecutorService threadPool;
 	
+	final Path rootPath = nfs.getPath(".").normalize();
+	
 	public MeldFs(Path mountLoc, Path[] sources, boolean debug, String options) {
 		super(true);
 		this.sources = SourceFs.fromPaths(sources);
@@ -38,6 +40,13 @@ public class MeldFs extends FuselajFs {
 		}
 		fuseArgs = arglist.toArray(new String[arglist.size()]);
 		threadPool = Executors.newCachedThreadPool();
+	}
+	
+	private Path parentOf(Path path) {
+		Path parent = path.getParent();
+		if (parent == null)
+			parent = rootPath;
+		return parent;
 	}
 	
 	int run() {
@@ -93,7 +102,20 @@ public class MeldFs extends FuselajFs {
 	protected void mkdir(Path path, int mode) throws FilesystemException {
 		// find which device contains the parent directory and create there
 		// if more than one device contains the parent, create on the device with the most recently modified
-		// TODO: implement
+		try {
+			Path dir = getLatestFile(path);
+			if (dir != null)
+				throw new FilesystemException(Errno.FileExists);
+			Path parent = parentOf(path);
+			Path parentDir = getLatestFile(parent);
+			if (parentDir == null)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			dir = parentDir.resolve(path.getFileName());
+			os_mkdir(dir, mode);
+		}
+		catch (InterruptedException ie) {
+			throw new FilesystemException(Errno.InterruptedSystemCall);
+		}
 	}
 	
 	@Override
