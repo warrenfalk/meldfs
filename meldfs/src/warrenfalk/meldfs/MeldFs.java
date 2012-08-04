@@ -408,8 +408,14 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void write(Path path, FileInfo fi, ByteBuffer bb, long offset) throws FilesystemException {
-		// TODO: implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		FileHandle fh = FileHandle.get(fi.getFileHandle());
+		FileChannel channel = (FileChannel)fh.data;
+		try {
+			channel.write(bb, offset);
+		}
+		catch (IOException e) {
+			throw new FilesystemException(e);
+		}
 	}
 	
 	@Override
