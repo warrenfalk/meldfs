@@ -246,6 +246,12 @@ public class MeldFs extends FuselajFs {
 		FileHandle.release(fi);
 	}
 	
+	@Override
+	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
+		// TODO: implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
 	/** Return the real path the the file if on one device, or the path to the most recently
 	 * modified version of the file if on multiple devices
 	 * @param path
