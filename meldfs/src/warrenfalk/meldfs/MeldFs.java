@@ -3,7 +3,6 @@ package warrenfalk.meldfs;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -13,9 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,8 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import warrenfalk.fuselaj.DirBuffer;
 import warrenfalk.fuselaj.Errno;
 import warrenfalk.fuselaj.FileInfo;
-import warrenfalk.fuselaj.FuselajFs;
 import warrenfalk.fuselaj.FilesystemException;
+import warrenfalk.fuselaj.FuselajFs;
 import warrenfalk.fuselaj.Stat;
 
 public class MeldFs extends FuselajFs {
