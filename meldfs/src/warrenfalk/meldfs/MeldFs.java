@@ -196,8 +196,10 @@ public class MeldFs extends FuselajFs {
 							Path p = source.root.resolve(dirpath);
 							if (Files.isDirectory(p)) {
 								try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
-									items.add(".");
-									items.add("..");
+									synchronized (items) {
+										items.add(".");
+										items.add("..");
+									}
 									for (Path item : stream) {
 										String itemName = item.getFileName().toString();
 										synchronized (items) {
