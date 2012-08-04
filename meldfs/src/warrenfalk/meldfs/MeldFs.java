@@ -379,9 +379,30 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
-	protected void unlink(Path path) throws FilesystemException {
-		// TODO implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+	protected void unlink(final Path path) throws FilesystemException {
+		final AtomicInteger deleted = new AtomicInteger(0);
+		final AtomicInteger found = new AtomicInteger(0);
+		runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(path);
+				if (Files.exists(sourceLoc)) {
+					found.incrementAndGet();
+					try {
+						Files.delete(sourceLoc);
+						deleted.incrementAndGet();
+					}
+					catch (IOException e) {
+						source.onIoException(e);
+					}
+				}
+			}
+		});
+		if (found.intValue() == 0)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		// TODO: try to throw the actual error that resulted
+		if (deleted.intValue() < found.intValue())
+			throw new FilesystemException(Errno.IOError);
 	}
 	
 	@Override
