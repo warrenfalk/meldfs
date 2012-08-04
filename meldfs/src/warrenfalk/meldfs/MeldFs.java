@@ -125,49 +125,30 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void rmdir(final Path path) throws FilesystemException {
-		try {
-			final AtomicInteger sync = new AtomicInteger(sources.length);
-			final AtomicInteger found = new AtomicInteger(0);
-			final AtomicInteger deleted = new AtomicInteger(0);
-			for (int i = 0; i < sources.length; i++) {
-				final int index = i;
-				threadPool.execute(new Runnable() {
-					@Override
-					public void run() {
-						SourceFs source = sources[index];
-						Path sourceLoc = source.root.resolve(path);
-						if (Files.exists(sourceLoc)) {
-							found.incrementAndGet();
-							try {
-								os_rmdir(sourceLoc);
-								deleted.incrementAndGet();
-							}
-							catch (FilesystemException fs) {
-								// TODO: figure out what to do here.
-								// We've tried to remove one of the instances of the directory, but at least one failed for some reason
-							}
-						}
-						if (0 == sync.decrementAndGet()) {
-							synchronized (sync) {
-								sync.notify();
-							}
-						}
-							
+		final AtomicInteger found = new AtomicInteger(0);
+		final AtomicInteger deleted = new AtomicInteger(0);
+		runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(path);
+				if (Files.exists(sourceLoc)) {
+					found.incrementAndGet();
+					try {
+						os_rmdir(sourceLoc);
+						deleted.incrementAndGet();
 					}
-				});
+					catch (FilesystemException fs) {
+						// TODO: figure out what to do here.
+						// We've tried to remove one of the instances of the directory, but at least one failed for some reason
+					}
+				}
 			}
-			synchronized (sync) {
-				sync.wait();
-			}
-			if (found.intValue() == 0)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			// TODO: we should probably return the error message from the os_rmdir that failed
-			if (found.intValue() != deleted.intValue())
-				throw new FilesystemException(Errno.IOError);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		});
+		if (found.intValue() == 0)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		// TODO: we should probably return the error message from the os_rmdir that failed
+		if (found.intValue() != deleted.intValue())
+			throw new FilesystemException(Errno.IOError);
 	}
 	
 	@Override
@@ -183,6 +164,20 @@ public class MeldFs extends FuselajFs {
 		}
 	}
 	
+	void runMultiSourceOperation(SourceOp operation) throws FilesystemException {
+		final AtomicInteger sync = new AtomicInteger(sources.length);
+		for (int i = 0; i < sources.length; i++)
+			threadPool.execute(new SourceOpRunner(operation, i, sources[i], sync));
+		try {
+			synchronized (sync) {
+				sync.wait();
+			}
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
+	}
+	
 	@Override
 	protected void readdir(Path path, DirBuffer dirBuffer, FileInfo fileInfo) throws FilesystemException {
 		FileHandle fh = FileHandle.get(fileInfo.getFileHandle());
@@ -190,49 +185,32 @@ public class MeldFs extends FuselajFs {
 		if (fh.data instanceof Path) {
 			final Path dirpath = (Path)fh.data;
 			final HashSet<String> items = new HashSet<String>();
-			final AtomicInteger sync = new AtomicInteger(sources.length);
-			for (int i = 0; i < sources.length; i++) {
-				final int index = i;
-				threadPool.execute(new Runnable() {
-					@Override
-					public void run() {
-						SourceFs source = sources[index];
-						try {
-							Path p = source.root.resolve(dirpath);
-							if (Files.isDirectory(p)) {
-								try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
+			
+			runMultiSourceOperation(new SourceOp() {
+				public void run(int index, SourceFs source) {
+					try {
+						Path p = source.root.resolve(dirpath);
+						if (Files.isDirectory(p)) {
+							try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
+								synchronized (items) {
+									items.add(".");
+									items.add("..");
+								}
+								for (Path item : stream) {
+									String itemName = item.getFileName().toString();
 									synchronized (items) {
-										items.add(".");
-										items.add("..");
-									}
-									for (Path item : stream) {
-										String itemName = item.getFileName().toString();
-										synchronized (items) {
-											items.add(itemName);
-										}
+										items.add(itemName);
 									}
 								}
 							}
-							if (0 == sync.decrementAndGet()) {
-								synchronized (sync) {
-									sync.notify();
-								}
-							}
-						}
-						catch (IOException ioe) {
-							source.onIoException(ioe);
 						}
 					}
-				});
-			}
-			try {
-				synchronized (sync) {
-					sync.wait();
+					catch (IOException ioe) {
+						source.onIoException(ioe);
+					}
 				}
-			}
-			catch (InterruptedException e) {
-				throw new FilesystemException(e);
-			}
+			});
+			
 			names = items.toArray(new String[items.size()]);
 			Arrays.sort(names);
 			fh.data = names;
@@ -280,49 +258,31 @@ public class MeldFs extends FuselajFs {
 		final Path[] files = new Path[sources.length];
 		final Path[] parents = new Path[sources.length];
 		final long[] modTimes = new long[sources.length];
-		final AtomicInteger sync = new AtomicInteger(sources.length);
-		for (int i = 0; i < sources.length; i++) {
-			final int index = i;
-			threadPool.execute(new Runnable() {
-				@Override
-				public void run() {
-					SourceFs source = sources[index];
-					Path sourceLoc = source.root.resolve(path);
-					if (Files.exists(sourceLoc)) {
-						try {
-							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
-							files[index] = sourceLoc;
-						}
-						catch (IOException ioe) {
-							source.onIoException(ioe);
-						}
+		runMultiSourceOperation(new SourceOp() {
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(path);
+				if (Files.exists(sourceLoc)) {
+					try {
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+						files[index] = sourceLoc;
 					}
-					sourceLoc = source.root.resolve(parent);
-					if (Files.exists(sourceLoc)) {
-						try {
-							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
-							parents[index] = sourceLoc;
-						}
-						catch (IOException ioe) {
-							source.onIoException(ioe);
-						}
-					}
-					if (0 == sync.decrementAndGet()) {
-						synchronized (sync) {
-							sync.notify();
-						}
+					catch (IOException ioe) {
+						source.onIoException(ioe);
 					}
 				}
-			});
-		}
-		try {
-			synchronized (sync) {
-				sync.wait();
+				sourceLoc = source.root.resolve(parent);
+				if (Files.exists(sourceLoc)) {
+					try {
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+						parents[index] = sourceLoc;
+					}
+					catch (IOException ioe) {
+						source.onIoException(ioe);
+					}
+				}
 			}
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		});
+
 		// find the youngest existing file (if any), first
 		long max = 0L;
 		Path realPath = null;
@@ -428,39 +388,26 @@ public class MeldFs extends FuselajFs {
 	 * @param path
 	 * @return
 	 * @throws InterruptedException
+	 * @throws FilesystemException 
 	 */
-	private Path getLatestFile(final Path path) throws InterruptedException {
+	private Path getLatestFile(final Path path) throws InterruptedException, FilesystemException {
 		final Path[] files = new Path[sources.length];
 		final long[] modTimes = new long[sources.length];
-		final AtomicInteger sync = new AtomicInteger(sources.length);
-		for (int i = 0; i < sources.length; i++) {
-			final int index = i;
-			threadPool.execute(new Runnable() {
-				@Override
-				public void run() {
-					SourceFs source = sources[index];
-					Path sourceLoc = source.root.resolve(path);
-					if (Files.exists(sourceLoc)) {
-						try {
-							modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
-							files[index] = sourceLoc;
-						}
-						catch (IOException ioe) {
-							source.onIoException(ioe);
-						}
+		runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(path);
+				if (Files.exists(sourceLoc)) {
+					try {
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+						files[index] = sourceLoc;
 					}
-					if (0 == sync.decrementAndGet()) {
-						synchronized (sync) {
-							sync.notify();
-						}
+					catch (IOException ioe) {
+						source.onIoException(ioe);
 					}
-						
 				}
-			});
-		}
-		synchronized (sync) {
-			sync.wait();
-		}
+			}
+		});
 		long max = 0L;
 		Path result = null;
 		for (int i = 0; i < sources.length; i++) {
