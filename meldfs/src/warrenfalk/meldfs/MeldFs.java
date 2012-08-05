@@ -241,6 +241,39 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected void link(final Path from, Path to) throws FilesystemException {
+		// get the current "from" file
+		final Path[] files = new Path[sources.length];
+		final long[] modTimes = new long[sources.length];
+		runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(from);
+				if (Files.exists(sourceLoc, LinkOption.NOFOLLOW_LINKS)) {
+					try {
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc, LinkOption.NOFOLLOW_LINKS).toMillis();
+						files[index] = sourceLoc;
+					}
+					catch (IOException ioe) {
+						source.onIoException(ioe);
+					}
+				}
+			}
+		});
+		int index = freshest(files, modTimes);
+		if (index == -1)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		Path realFrom = files[index];
+		SourceFs fromSource = sources[index];
+		Path realTo = fromSource.root.resolve(to);
+		Path realToParent = parentOf(realTo);
+		// Sorry, can't figure out a way to do that consistently, the directory currently has to already exist on the same source fs
+		if (!Files.isDirectory(realToParent))
+			throw new FilesystemException(Errno.CrossDeviceLink);
+		os_link(realFrom, realTo);
+	}
+	
+	@Override
 	protected void rename(final Path from, final Path to) throws FilesystemException {
 		final Path toParent = parentOf(to);
 		final Path fromParent = parentOf(from);
@@ -338,7 +371,7 @@ public class MeldFs extends FuselajFs {
 			return null;
 		return files[i];
 	}
-
+	
 	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
 		Path realPath = getLatestFile(path);
