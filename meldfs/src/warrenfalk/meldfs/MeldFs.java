@@ -255,8 +255,16 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void symlink(Path targetOfLink, Path pathOfLink) throws FilesystemException {
-		// TODO Implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		Path realPath;
+		try {
+			realPath = getLatestFile(parentOf(pathOfLink));
+			if (realPath == null)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
+		os_symlink(targetOfLink, realPath.resolve(pathOfLink.getFileName()));
 	}
 	
 	@Override
