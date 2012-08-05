@@ -97,7 +97,7 @@ public class MeldFs extends FuselajFs {
 			Path file = getLatestFile(path);
 			if (file == null)
 				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			os_stat(file.toAbsolutePath(), stat);
+			os_lstat(file, stat);
 		}
 		catch (InterruptedException ie) {
 			throw new FilesystemException(ie);
@@ -241,8 +241,16 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected Path readlink(Path path) throws FilesystemException {
-		// TODO Implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		Path realPath;
+		try {
+			realPath = getLatestFile(path);
+		}
+		catch (InterruptedException e) {
+			throw new FilesystemException(e);
+		}
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		return os_readlink(realPath);
 	}
 	
 	@Override
@@ -549,9 +557,9 @@ public class MeldFs extends FuselajFs {
 			@Override
 			public void run(int index, SourceFs source) {
 				Path sourceLoc = source.root.resolve(path);
-				if (Files.exists(sourceLoc)) {
+				if (Files.exists(sourceLoc, LinkOption.NOFOLLOW_LINKS)) {
 					try {
-						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc, LinkOption.NOFOLLOW_LINKS).toMillis();
 						files[index] = sourceLoc;
 					}
 					catch (IOException ioe) {
