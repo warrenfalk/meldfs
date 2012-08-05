@@ -471,6 +471,18 @@ public class MeldFs extends FuselajFs {
 			throw new FilesystemException(e);
 		}
 	}
+
+	@Override
+	protected void fsync(Path path, boolean isdatasync, FileInfo fi) throws FilesystemException {
+		FileHandle fh = FileHandle.get(fi.getFileHandle());
+		FileChannel channel = (FileChannel)fh.data;
+		try {
+			channel.force(!isdatasync);
+		}
+		catch (IOException e) {
+			throw new FilesystemException(e);
+		}
+	}
 	
 	@Override
 	protected void unlink(final Path path) throws FilesystemException {
