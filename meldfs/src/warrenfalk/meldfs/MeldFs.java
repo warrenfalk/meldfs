@@ -461,6 +461,18 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected void ftruncate(Path path, long size, FileInfo fi) throws FilesystemException {
+		FileHandle fh = FileHandle.get(fi.getFileHandle());
+		FileChannel channel = (FileChannel)fh.data;
+		try {
+			channel.truncate(size);
+		}
+		catch (IOException e) {
+			throw new FilesystemException(e);
+		}
+	}
+	
+	@Override
 	protected void unlink(final Path path) throws FilesystemException {
 		final AtomicInteger deleted = new AtomicInteger(0);
 		final AtomicInteger found = new AtomicInteger(0);
