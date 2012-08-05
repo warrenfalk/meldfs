@@ -551,6 +551,12 @@ public class MeldFs extends FuselajFs {
 		}
 	}
 	
+	@Override
+	protected void utimens(Path path, long accessSeconds, long accessNanoseconds, long modSeconds, long modNanoseconds) throws FilesystemException {
+		// TODO implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
 	/** Return the real path the the file if on one device, or the path to the most recently
 	 * modified version of the file if on multiple devices
 	 * @param path
