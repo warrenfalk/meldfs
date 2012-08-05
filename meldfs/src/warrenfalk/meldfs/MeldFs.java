@@ -230,6 +230,12 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected void rename(Path from, Path to) throws FilesystemException {
+		// TODO Implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
+	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
 		Path realPath;
 		try {
