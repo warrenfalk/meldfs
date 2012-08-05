@@ -493,6 +493,14 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected void truncate(Path path, long size) throws FilesystemException {
+		Path realPath = getLatestFile(path);
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		os_truncate(realPath, size);
+	}
+	
+	@Override
 	protected void chown(Path path, int uid, int gid) throws FilesystemException {
 		Path realPath = getLatestFile(path);
 		if (realPath == null)
