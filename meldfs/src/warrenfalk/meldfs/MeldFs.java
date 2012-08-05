@@ -240,6 +240,18 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	@Override
+	protected Path readlink(Path path) throws FilesystemException {
+		// TODO Implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
+	@Override
+	protected void symlink(Path targetOfLink, Path pathOfLink) throws FilesystemException {
+		// TODO Implement
+		throw new FilesystemException(Errno.FunctionNotImplemented);
+	}
+	
+	@Override
 	protected void rename(final Path from, final Path to) throws FilesystemException {
 		final Path toParent = parentOf(to);
 		final Path fromParent = parentOf(from);
