@@ -92,36 +92,26 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void getattr(Path path, Stat stat) throws FilesystemException {
-		try {
-			// attempt to find entry with that name
-			Path file = getLatestFile(path);
-			if (file == null)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			os_lstat(file, stat);
-		}
-		catch (InterruptedException ie) {
-			throw new FilesystemException(ie);
-		}
+		// attempt to find entry with that name
+		Path file = getLatestFile(path);
+		if (file == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		os_lstat(file, stat);
 	}
 	
 	@Override
 	protected void mkdir(Path path, int mode) throws FilesystemException {
 		// find which device contains the parent directory and create there
 		// if more than one device contains the parent, create on the device with the most recently modified
-		try {
-			Path dir = getLatestFile(path);
-			if (dir != null)
-				throw new FilesystemException(Errno.FileExists);
-			Path parent = parentOf(path);
-			Path parentDir = getLatestFile(parent);
-			if (parentDir == null)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			dir = parentDir.resolve(path.getFileName());
-			os_mkdir(dir, mode);
-		}
-		catch (InterruptedException ie) {
-			throw new FilesystemException(ie);
-		}
+		Path dir = getLatestFile(path);
+		if (dir != null)
+			throw new FilesystemException(Errno.FileExists);
+		Path parent = parentOf(path);
+		Path parentDir = getLatestFile(parent);
+		if (parentDir == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		dir = parentDir.resolve(path.getFileName());
+		os_mkdir(dir, mode);
 	}
 	
 	@Override
@@ -154,15 +144,10 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void opendir(Path path, FileInfo fi) throws FilesystemException {
-		try {
-			Path dir = getLatestFile(path);
-			if (!Files.isDirectory(dir))
-				throw new FilesystemException(Errno.NotADirectory);
-			FileHandle.open(fi, path);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		Path dir = getLatestFile(path);
+		if (!Files.isDirectory(dir))
+			throw new FilesystemException(Errno.NotADirectory);
+		FileHandle.open(fi, path);
 	}
 	
 	void runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
@@ -241,13 +226,7 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected Path readlink(Path path) throws FilesystemException {
-		Path realPath;
-		try {
-			realPath = getLatestFile(path);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		Path realPath = getLatestFile(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		return os_readlink(realPath);
@@ -255,15 +234,9 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void symlink(Path targetOfLink, Path pathOfLink) throws FilesystemException {
-		Path realPath;
-		try {
-			realPath = getLatestFile(parentOf(pathOfLink));
-			if (realPath == null)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		Path realPath = getLatestFile(parentOf(pathOfLink));
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_symlink(targetOfLink, realPath.resolve(pathOfLink.getFileName()));
 	}
 	
@@ -368,13 +341,7 @@ public class MeldFs extends FuselajFs {
 
 	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
-		Path realPath;
-		try {
-			realPath = getLatestFile(path);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		Path realPath = getLatestFile(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		try {
@@ -527,28 +494,18 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void chown(Path path, int uid, int gid) throws FilesystemException {
-		try {
-			Path realPath = getLatestFile(path);
-			if (realPath == null)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			os_chown(realPath, uid, gid);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		Path realPath = getLatestFile(path);
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		os_chown(realPath, uid, gid);
 	}
 	
 	@Override
 	protected void chmod(Path path, int mode) throws FilesystemException {
-		try {
-			Path realPath = getLatestFile(path);
-			if (realPath == null)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			os_chmod(realPath, mode);
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
+		Path realPath = getLatestFile(path);
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		os_chmod(realPath, mode);
 	}
 	
 	@Override
@@ -564,7 +521,7 @@ public class MeldFs extends FuselajFs {
 	 * @throws InterruptedException
 	 * @throws FilesystemException 
 	 */
-	private Path getLatestFile(final Path path) throws InterruptedException, FilesystemException {
+	private Path getLatestFile(final Path path) throws FilesystemException {
 		final Path[] files = new Path[sources.length];
 		final long[] modTimes = new long[sources.length];
 		runMultiSourceOperation(new SourceOp() {
