@@ -510,8 +510,10 @@ public class MeldFs extends FuselajFs {
 	
 	@Override
 	protected void utimens(Path path, long accessSeconds, long accessNanoseconds, long modSeconds, long modNanoseconds) throws FilesystemException {
-		// TODO implement
-		throw new FilesystemException(Errno.FunctionNotImplemented);
+		Path realPath = getLatestFile(path);
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		os_utimensat(realPath, accessSeconds, accessNanoseconds, modSeconds, modNanoseconds);
 	}
 	
 	/** Return the real path the the file if on one device, or the path to the most recently
