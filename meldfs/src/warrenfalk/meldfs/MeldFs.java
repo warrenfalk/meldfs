@@ -30,9 +30,15 @@ public class MeldFs extends FuselajFs {
 	SourceFs[] sources;
 	String[] fuseArgs;
 	ExecutorService threadPool;
-	
+
 	final Path rootPath = nfs.getPath(".").normalize();
 	
+	/** Initialize a MeldFs instance
+	 * @param mountLoc
+	 * @param sources
+	 * @param debug
+	 * @param options
+	 */
 	public MeldFs(Path mountLoc, Path[] sources, boolean debug, String options) {
 		super(true);
 		this.sources = SourceFs.fromPaths(sources);
@@ -48,6 +54,11 @@ public class MeldFs extends FuselajFs {
 		threadPool = Executors.newCachedThreadPool();
 	}
 	
+	/** Find the parent path of the given path.
+	 * Note: this is distinct from path.getParent() in that it returns the rootPath instead of null
+	 * @param path
+	 * @return the parent of path
+	 */
 	private Path parentOf(Path path) {
 		Path parent = path.getParent();
 		if (parent == null)
@@ -55,6 +66,9 @@ public class MeldFs extends FuselajFs {
 		return parent;
 	}
 	
+	/** Starts the fuse main loop
+	 * @return the exit value of the fuse main loop
+	 */
 	int run() {
 		return run(fuseArgs);
 	}
@@ -129,7 +143,7 @@ public class MeldFs extends FuselajFs {
 						deleted.incrementAndGet();
 					}
 					catch (FilesystemException fs) {
-						// TODO: figure out what to do here.
+						// TODO: figure out what to do here, this should have some sort of transactional capability
 						// We've tried to remove one of the instances of the directory, but at least one failed for some reason
 					}
 				}
@@ -150,6 +164,12 @@ public class MeldFs extends FuselajFs {
 		FileHandle.open(fi, path);
 	}
 	
+	/** Runs a source operation against all selected sources concurrently, returning only when all are complete.
+	 * A source is selected if the element at its position within the mask argument is not null
+	 * @param mask
+	 * @param operation
+	 * @throws FilesystemException
+	 */
 	void runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
 		final AtomicInteger sync = new AtomicInteger(sources.length);
 		try {
@@ -169,6 +189,11 @@ public class MeldFs extends FuselajFs {
 		}
 	}
 	
+	/** Runs a source operation against all sources concurrently, returning only when all are complete
+	 * @param mask
+	 * @param operation
+	 * @throws FilesystemException
+	 */
 	void runMultiSourceOperation(SourceOp operation) throws FilesystemException {
 		runMultiSourceOperation(null, operation);
 	}
@@ -344,7 +369,8 @@ public class MeldFs extends FuselajFs {
 	}
 	
 	/**
-	 * Returns the index of the freshest file.  I.e. return x for the greatest modTimes[x] for which files[x] is not null, or -1 if all files are null.
+	 * Returns the index of the freshest file.
+	 * I.e. return x for the greatest modTimes[x] for which files[x] is not null, or -1 if all files are null.
 	 * Lower values of x are favored in ties.
 	 * @param files
 	 * @param modTimes
@@ -365,6 +391,12 @@ public class MeldFs extends FuselajFs {
 		return result;
 	}
 	
+	/**
+	 * Returns the real path of the freshest version of the file across all sources
+	 * @param files
+	 * @param modTimes
+	 * @return
+	 */
 	private Path freshestFile(Path[] files, long[] modTimes) {
 		int i = freshest(files, modTimes);
 		if (i == -1)
@@ -442,6 +474,11 @@ public class MeldFs extends FuselajFs {
 		}
 	}
 
+	/**
+	 * Get a set of Java OpenOption flags which correspond to the FUSE/Linux O_FLAGS bit mask  
+	 * @param openFlags
+	 * @return
+	 */
 	private Set<? extends OpenOption> getJavaOpenOpts(int openFlags) {
 		HashSet<StandardOpenOption> set = new HashSet<StandardOpenOption>();
 		switch (openFlags & FileInfo.O_ACCMODE) {
