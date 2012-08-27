@@ -1,5 +1,7 @@
 package warrenfalk.reedsolomon;
 
+import java.nio.ByteBuffer;
+
 import warrenfalk.util.math.GaloisField;
 import warrenfalk.util.math.MatrixR;
 
@@ -175,11 +177,102 @@ public class ReedSolomonCodingDomain {
 		}
 		
 		/**
+		 * Calculates symbol data for specified buffers from valid buffers.
+		 * 
+		 * <ul>
+		 * <li>Each buffer is a vertical column of symbols whose rows constitute words</li>
+		 * <li>Missing symbols are calculated as specified by <code>calcMask</code> where bit zero, if set, results in the calculation of the first buffer column.</li>
+		 * <li>Positions of buffers are ignored</li>
+		 * <li>Limits of the buffers to be calculated will be overwritten</li>
+		 * <li>Non-calculated buffers will be used to calculate the missing symbols, but no data is "consumed", which is to say that their position is not modified</li>
+		 * <li>Calculated buffers will have their limits reset and their positions set to zero making them ready for use as source buffers</li>
+		 * <li>The height of the columns is determined by the limits of the buffers (position is always assumed to be zero)</li>
+		 * <li>Calculated columns will have the same height as the non-calculated columns</li>
+		 * <li>If columns have irregular height, all will be treated as having the same height as the tallest column by virtually padding them with zeros</li>
+		 * </ul>
+		 * @param columns ByteBuffers, each byte of which contributing one symbol to a word of length columns.length
+		 * @param calcMask a mask specifying which columns to calculate such that bit 0, when set, causes column[0] to be calculated
+		 * @return the total number of bytes injected into the calculated columns
+		 */
+		public int calculate(ByteBuffer[] columns, long calcMask) {
+			// the calculated columns must be as large as the largest column
+			int calcedHeight = 0;
+			for (int i = 0; i < dataSize; i++)
+				if (calcedHeight < columns[i].limit())
+					calcedHeight = columns[i].limit();
+			
+			int result = 0;
+
+			// automatically clear any bits for calc that are already valid as there's nothing to do for these.
+			calcMask &= ~validMask;
+			// calculation of checksum values requires all data values to be valid. So if any data values are invalid and a checksum value was requested, automatically request the data symbols also
+			boolean invalidChecksum = 0 != (calcMask & checksumMask);
+			if (invalidChecksum)
+				calcMask |= (~validMask & dataMask);
+			// calculate data fields first
+			if (0 != (calcMask & dataMask)) {
+				int bit = 1;
+				for (int index = 0; index < dataSize; index++) {
+					if (0 != (bit & calcMask)) {
+						ByteBuffer buffer = columns[index];
+						// set the height
+						buffer.limit(calcedHeight);
+						for (int position = 0; position < calcedHeight; position++) {
+							int symbol = 0;
+							for (int j = 0; j < dataSize; j++) {
+								ByteBuffer dataColumn = columns[validSymbolMap[j]];
+								symbol = gf.add(symbol, gf.mult(recoveryMatrix.get(index, j), (position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF));
+							}
+							buffer.put(position, (byte)(symbol & 0xFF));
+						}						
+						buffer.position(calcedHeight);
+						buffer.flip();
+						result += calcedHeight;
+					}
+					bit <<= 1;
+				}
+			}
+			// calculate checksum
+			if (invalidChecksum) {
+				int bit = 1 << dataSize;
+				for (int c = 0; c < checksumSize; c++) {
+					if (0 != (calcMask & bit)) {
+						ByteBuffer buffer = columns[dataSize + c];
+						// set the height
+						buffer.limit(calcedHeight);
+						for (int position = 0; position < calcedHeight; position++) {
+							int symbol = 0;
+							// the checksum is equal to the sum of the products of each data symbol by the corresponding value in the coding matrix
+							for (int k = 0; k < dataSize; k++) {
+								ByteBuffer dataColumn = columns[k];
+								symbol = gf.add(symbol, gf.mult((position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF, codingMatrix.get(dataSize + c, k)));
+							}
+							buffer.put(position, (byte)(symbol & 0xFF));
+						}
+						buffer.position(calcedHeight);
+						buffer.flip();
+						result += calcedHeight;
+					}
+					bit <<= 1;
+				}
+			}
+			return result;
+		}
+		
+		/**
 		 * Automatically calculates all invalid symbols
 		 * @param codeWord the code word
 		 */
 		public void calculate(int[] codeWord) {
 			calculate(codeWord, ~validMask & (dataMask | checksumMask));
+		}
+		
+		/**
+		 * Automatically calculates all invalid symbols
+		 * @param codeWord the code word
+		 */
+		public long calculate(ByteBuffer[] columns) {
+			return calculate(columns, ~validMask & (dataMask | checksumMask));
 		}
 		
 	}

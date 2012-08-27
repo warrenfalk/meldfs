@@ -131,17 +131,38 @@ public class TestFileStriper {
 			
 			coder = new StripeCoder() {
 				@Override
-				public void calculate(int[] codingBuffer, int calcMask) {
+				public int calculate(ByteBuffer[] columns, int calcMask) {
+					// the checksum block must be as large as the
+					// largest data block
+					int csSize = 0;
+					for (int i = 0; i < dataCount; i++)
+						if (csSize < columns[i].limit())
+							csSize = columns[i].limit();
+					
+					int result = 0;
+					
+					// do actual calculation
 					for (int c = 0; c < checksumCount; c++) {
 						int i = c + dataCount;
-						if (0 != (calcMask & (1 << i))) {
+						if (0 == (calcMask & (1 << i)))
+							continue;
+						ByteBuffer buffer = columns[i];
+						// move the pointer
+						buffer.limit(csSize);
+						for (int position = 0; position < csSize; position++) {
 							int value = c + dataCount;
-							for (int d = 0; d < dataCount; d++)
-								value = hash(value, codingBuffer[d]);
-							value = (byte)(value & 0xFF);
-							codingBuffer[i] = value;
+							for (int d = 0; d < dataCount; d++) {
+								ByteBuffer dataColumn = columns[d];
+								value = hash(value, (position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF);
+							}
+							buffer.put(position, (byte)(value & 0xFF));
 						}
+						buffer.position(csSize);
+						buffer.flip();
+						result += csSize;
 					}
+					
+					return result;
 				}
 			};
 			

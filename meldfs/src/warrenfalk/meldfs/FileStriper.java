@@ -114,8 +114,8 @@ public class FileStriper {
 			final Coder coder = domain.getChecksumCoder();
 			stripeCoder = new StripeCoder() {
 				@Override
-				public void calculate(int[] codingBuffer, int calcMask) {
-					coder.calculate(codingBuffer, calcMask);
+				public int calculate(ByteBuffer[] columns, int calcMask) {
+					return coder.calculate(columns, calcMask);
 				}
 			};
 		}
@@ -186,7 +186,6 @@ public class FileStriper {
 		}
 	}
 	
-	// TODO: return the length of the final result
 	public void stripe(final ScatteringByteChannel input, final WritableByteChannel[] outputs) throws IOException {
 		// verify there is one output per source
 		if (outputs.length != dataSources + checksumSources)
@@ -393,29 +392,10 @@ public class FileStriper {
 		
 		/** calculate checksum number [index], where [index] is 0 for the first checksum column */
 		private void calc(StripeCoder stripeCoder, int index) {
-			// TODO: don't allocate this every time
-			int[] codingBuffer = new int[buffers.length];
 			int csindex = index + dataCount;
-			// the checksum block must be as large as the
-			// largest data block
-			int blockSize = buffers[0].capacity();
-			int csSize = (size > blockSize) ? blockSize : size;
-			// get the checksum output buffer
-			ByteBuffer buffer = buffers[csindex];
-			// move the pointer
-			buffer.limit(csSize);
 			int calcMask = 1 << (csindex);
-			for (int position = 0; position < csSize; position++) {
-				// fill the data portion of the coding word buffer from the data buffers
-				for (int i = 0; i < dataCount; i++) {
-					ByteBuffer databuffer = buffers[i];
-					codingBuffer[i] = (position < databuffer.limit() ? buffers[i].get(position) : 0) & 0xFF;
-				}
-				stripeCoder.calculate(codingBuffer, calcMask);
-				buffer.put(position, (byte)codingBuffer[dataCount + index]);
-			}
-			buffer.position(csSize);
-			buffer.flip();
+			stripeCoder.calculate(buffers, calcMask);
+			buffers[csindex].flip();
 		}
 		
 		public void empty(StripeCoder stripeCoder, int column, WritableByteChannel output) throws IOException {
