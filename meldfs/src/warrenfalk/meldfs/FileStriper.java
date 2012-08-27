@@ -395,7 +395,6 @@ public class FileStriper {
 			int csindex = index + dataCount;
 			int calcMask = 1 << (csindex);
 			stripeCoder.calculate(buffers, calcMask);
-			buffers[csindex].flip();
 		}
 		
 		public void empty(StripeCoder stripeCoder, int column, WritableByteChannel output) throws IOException {

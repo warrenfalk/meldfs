@@ -18,6 +18,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 	
 	@Test
@@ -26,6 +27,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}	
 		
 	@Test
@@ -34,6 +36,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}	
 		
 	@Test
@@ -42,6 +45,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}	
 		
 	@Test
@@ -50,6 +54,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 		
 	@Test
@@ -58,6 +63,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 
 	@Test
@@ -67,6 +73,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 
 	@Test
@@ -76,6 +83,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 
 	@Test
@@ -85,6 +93,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, blockSize, 20, 3);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 
 	@Test
@@ -94,6 +103,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, blockSize, 2, 1);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 
 	@Test
@@ -103,6 +113,7 @@ public class TestFileStriper {
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
+		stripeTest.verify();
 	}
 
 	private byte[] createSource(int length) {
@@ -122,6 +133,7 @@ public class TestFileStriper {
 		final StripeCoder coder;
 		final ScatteringByteChannel input;
 		final WritableByteChannel[] outputs;
+		final long[] outsizes;
 		
 		StripeTest(final byte[] bytes, final int blockSize, final int dataCount, final int checksumCount) {
 			this.source = bytes;
@@ -190,7 +202,7 @@ public class TestFileStriper {
 						int len = 0;
 						while (src.hasRemaining()) {
 							byte b = src.get();
-							writeByte(column, position, b);
+							verifyWriteByte(column, position, b);
 							position++;
 							len++;
 						}
@@ -198,16 +210,36 @@ public class TestFileStriper {
 					}
 				};
 			}
+			this.outsizes = new long[outputs.length];
 		}
 		
+		public void verify() {
+			for (int i = 0; i < outputs.length; i++)
+				assertEquals("size of output " + i, expectedColumnSize(i), outsizes[i]);
+		}
+
+		private long expectedColumnSize(int column) {
+			if (column >= dataCount)
+				column = 0; // checksum columns are always as large as data column [0]
+			int completeSourceBlocks = source.length / blockSize;
+			int minBlockPerColumn = completeSourceBlocks / dataCount;
+			int evenSize = minBlockPerColumn * dataCount * blockSize;
+			int excessStripeSize = source.length - evenSize;
+			excessStripeSize -= column * blockSize;
+			excessStripeSize = Math.max(excessStripeSize, 0);
+			excessStripeSize = Math.min(excessStripeSize, blockSize);
+			return excessStripeSize + (minBlockPerColumn * blockSize);
+		}
+
 		public FileStriper createStriper() {
 			return new FileStriper(coder, blockSize, dataCount, checksumCount);			
 		}
-
-		void writeByte(int column, long position, byte b) {
+		
+		void verifyWriteByte(int column, long position, byte b) {
 			byte expected = getExpectedByteAt("write", column, position);
 			byte actual = b;
 			assertEquals("stripe byte written to position " + position + " of column " + column, expected, actual);
+			outsizes[column]++;
 		}
 		
 		private byte getDataByteAt(int column, long position) {
