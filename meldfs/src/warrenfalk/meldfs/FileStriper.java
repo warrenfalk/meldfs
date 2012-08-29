@@ -10,10 +10,11 @@ import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain;
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain.Coder;
@@ -161,7 +162,53 @@ public class FileStriper {
 	}
 	
 	private <T> BlockingQueue<T> createQueue() {
-		return new ArrayBlockingQueue<T>(3);
+		//return new ArrayBlockingQueue<T>(3);
+		//return new LinkedBlockingDeque<T>(3);
+		return new RingBuffer<T>(3);
+	}
+	
+	interface BlockingQueue<T> {
+		T take() throws InterruptedException;
+		void put(T item) throws InterruptedException;
+	}
+	
+	static class RingBuffer<T> implements BlockingQueue<T> {
+		final Object[] items;
+		int index;
+		int size;
+		
+		public RingBuffer(int capacity) {
+			this.items = new Object[capacity];
+		}
+
+		@Override
+		public T take() throws InterruptedException {
+			synchronized (items) {
+				while (size == 0)
+					items.wait();
+				@SuppressWarnings("unchecked")
+				T item = (T)items[index];
+				index = (index + 1) % items.length;
+				if (size == items.length)
+					items.notify();
+				size--;
+				return item;
+			}
+		}
+
+		@Override
+		public void put(T item) throws InterruptedException {
+			synchronized (items) {
+				while (size == items.length)
+					items.wait();
+				int writeIndex = (index + size) % items.length;
+				items[writeIndex] = item;
+				if (size == 0)
+					items.notify();
+				size++;
+			}
+		}
+		
 	}
 	
 	private <T> BlockingQueue<T>[] createQueues(int count) {
