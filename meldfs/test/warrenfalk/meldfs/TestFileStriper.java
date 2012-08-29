@@ -5,7 +5,7 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.ScatteringByteChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
 import org.junit.Test;
@@ -131,7 +131,7 @@ public class TestFileStriper {
 		final int dataCount;
 		final int checksumCount;
 		final StripeCoder coder;
-		final ScatteringByteChannel input;
+		final ReadableByteChannel input;
 		final WritableByteChannel[] outputs;
 		final long[] outsizes;
 		
@@ -294,7 +294,7 @@ public class TestFileStriper {
 		}
 	}
 	
-	static class MemoryChannel implements ScatteringByteChannel {
+	static class MemoryChannel implements ReadableByteChannel {
 		final ByteBuffer bb;
 		boolean open;
 		
@@ -322,23 +322,6 @@ public class TestFileStriper {
 			dst.put(src);
 			bb.position(bb.position() + limit);
 			return limit;
-		}
-		
-		@Override
-		public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
-			long totlen = 0;
-			for (int i = offset; i < (offset + length); i++) {
-				int seglen = read(dsts[i]);
-				if (seglen == -1)
-					return (totlen == 0) ? -1 : totlen;
-				totlen += seglen;
-			}
-			return totlen;
-		}
-		
-		@Override
-		public long read(ByteBuffer[] dsts) throws IOException {
-			return read(dsts, 0, dsts.length);
 		}
 	}
 

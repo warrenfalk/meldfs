@@ -3,7 +3,7 @@ package warrenfalk.meldfs;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.ScatteringByteChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -186,7 +186,7 @@ public class FileStriper {
 		}
 	}
 	
-	public void stripe(final ScatteringByteChannel input, final WritableByteChannel[] outputs) throws IOException {
+	public void stripe(final ReadableByteChannel input, final WritableByteChannel[] outputs) throws IOException {
 		// verify there is one output per source
 		if (outputs.length != dataSources + checksumSources)
 			throw new IllegalArgumentException("tried to use a " + dataSources + "x" + checksumSources + " striper with " + outputs.length + " outputs");
@@ -274,10 +274,13 @@ public class FileStriper {
 		for (int i = 0; i < writers.length; i++)
 			writers[i].start();
 		
+		
+		BufferPool bufferPool = new BufferPool(3 * (dataSources + checksumSources) * blockSize);
+		
 		// create three new stripes ready for reading, and queue them
 		try {
 			for (int i = 0; i < 3; i++)
-				readReady.put(new Stripe(dataSources, checksumSources, blockSize));
+				readReady.put(new Stripe(bufferPool, dataSources, checksumSources, blockSize));
 		}
 		catch (InterruptedException e) {
 			return;
@@ -335,25 +338,55 @@ public class FileStriper {
 		else if (throwable != null)
 			throw new RuntimeException(throwable);
 	}
+
+	static class BufferPool {
+		final ByteBuffer mother;
+		int next;
+		
+		public BufferPool(int capacity) {
+			mother = ByteBuffer.allocateDirect(capacity);
+		}
+		
+		synchronized StripeBuffer getBuffer(int blockSize, int dataBlocks, int checksumBlocks) {
+			int blocksPerStripe = dataBlocks + checksumBlocks;
+			int stripeSize = blockSize * blocksPerStripe;
+			mother.position(next);
+			next += stripeSize;
+			mother.limit(next);
+			ByteBuffer stripe = mother.slice();
+			ByteBuffer[] blocks = new ByteBuffer[blocksPerStripe];
+			for (int i = 0; i < blocks.length; i++) {
+				stripe.position(i * blockSize);
+				stripe.limit((i + 1) * blockSize);
+				blocks[i] = stripe.slice();
+			}
+			stripe.limit(dataBlocks * blockSize);
+			stripe.position(0);
+			stripe = stripe.slice();
+			return new StripeBuffer(stripe, blocks);
+		}
+		
+	}
 	
-	private static ByteBuffer getBuffer(int blockSize) {
-		// TODO: see if using allocate() is more efficient than allocateDirect()
-		return ByteBuffer.allocate(blockSize);
+	static final class StripeBuffer {
+		final ByteBuffer stripe;
+		final ByteBuffer[] blocks;
+		
+		public StripeBuffer(ByteBuffer stripe, ByteBuffer[] blocks) {
+			this.stripe = stripe;
+			this.blocks = blocks;
+		}
 	}
 	
 	private static class Stripe {
-		final ByteBuffer[] buffers;
+		final StripeBuffer stripeBuffer;
 		final int dataCount;
-		int size;
 		int writersRemaining;
 		boolean eof;
 		
-		public Stripe(int dataCount, int checksumCount, int blockSize) {
+		public Stripe(BufferPool bufferPool, int dataCount, int checksumCount, int blockSize) {
 			this.dataCount = dataCount;
-			int columnCount = dataCount + checksumCount;
-			buffers = new ByteBuffer[columnCount];
-			for (int i = 0; i < buffers.length; i++)
-				buffers[i] = getBuffer(blockSize);
+			stripeBuffer = bufferPool.getBuffer(blockSize, dataCount, checksumCount);
 		}
 
 		/** signals that the empty for the current writer is complete, and returns true if all other writers are also complete */
@@ -364,29 +397,32 @@ public class FileStriper {
 			}
 		}
 
-		public void fill(ScatteringByteChannel channel) throws IOException {
-			for (int i = 0; i < buffers.length; i++)
-				buffers[i].clear();
+		public void fill(ReadableByteChannel channel) throws IOException {
+			ByteBuffer stripe = stripeBuffer.stripe;
+			ByteBuffer[] blocks = stripeBuffer.blocks;
+			stripe.clear();
 			long read;
 			// every stripe read except possibly the last must fill the data buffers
 			// so calculate how much means full
-			size = 0;
-			int full = this.dataCount * buffers[0].capacity();
-			while (size < full) {
-				read = (int)channel.read(buffers, 0, dataCount);
+			while (stripe.hasRemaining()) {
+				read = channel.read(stripe);
 				if (read == -1) {
 					eof = true;
 					break;
 				}
-				size += read;
 			}
-			for (int i = 0; i < buffers.length; i++) {
-				assert (i >= dataCount || eof || buffers[i].hasRemaining() == false);
-				buffers[i].flip();
+			stripe.flip();
+			for (int i = 0; i < blocks.length; i++) {
+				ByteBuffer block = blocks[i];
+				block.position(0);
+				int limit = Math.min(block.capacity(), stripe.remaining());
+				block.limit(limit);
+				stripe.position(stripe.position() + limit);
+				assert (i >= dataCount || eof || block.remaining() == block.capacity());
 			}
 			// once full, prepare to queue the writers
 			synchronized (this) {
-				writersRemaining = buffers.length;
+				writersRemaining = blocks.length;
 			}
 		}
 		
@@ -394,12 +430,13 @@ public class FileStriper {
 		private void calc(StripeCoder stripeCoder, int index) {
 			int csindex = index + dataCount;
 			int calcMask = 1 << (csindex);
-			stripeCoder.calculate(buffers, calcMask);
+			stripeCoder.calculate(stripeBuffer.blocks, calcMask);
+			//buffers[csindex].position(buffers[csindex].limit());
 		}
 		
 		public void empty(StripeCoder stripeCoder, int column, WritableByteChannel output) throws IOException {
-			if (size > 0) {
-				ByteBuffer buffer = buffers[column];
+			if (stripeBuffer.stripe.position() > 0) {
+				ByteBuffer buffer = stripeBuffer.blocks[column];
 				if (column >= dataCount)
 					calc(stripeCoder, column - dataCount);
 				output.write(buffer);
