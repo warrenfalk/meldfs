@@ -249,8 +249,8 @@ public class ReedSolomonCodingDomain {
 							}
 							buffer.put(position, (byte)(symbol & 0xFF));
 						}
-						buffer.position(calcedHeight);
-						buffer.flip();
+						if (buffer.position() != 0)
+							buffer.position(0);
 						result += calcedHeight;
 					}
 					bit <<= 1;
