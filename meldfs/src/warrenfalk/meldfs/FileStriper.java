@@ -20,15 +20,17 @@ public class FileStriper {
 	final int blockSize;
 	final int dataSources;
 	final int checksumSources;
+	final int ringBufferSize;
 	final StripeCoder stripeCoder;
 	
 	final static ExecutorService threadPool = Executors.newCachedThreadPool();
 
-	public FileStriper(StripeCoder stripeCoder, int blockSize, int dataSources, int checksumSources) {
+	public FileStriper(StripeCoder stripeCoder, int blockSize, int dataSources, int checksumSources, int ringBufferSize) {
 		this.blockSize = blockSize;
 		this.dataSources = dataSources;
 		this.checksumSources = checksumSources;
 		this.stripeCoder = stripeCoder;
+		this.ringBufferSize = ringBufferSize;
 	}
 	
 	public static void main(String[] args) throws IOException {
@@ -42,6 +44,7 @@ public class FileStriper {
 		int dataSize = -1;
 		int checksumSize = -1;
 		int blockSize = 512;
+		int ringBufferSize = 3;
 		String inputArg = null;
 		ArrayList<String> outputArgs = new ArrayList<String>();
 		try {
@@ -56,6 +59,8 @@ public class FileStriper {
 						checksumSize = parseIntArg("-c", arg.substring(2));
 					else if (arg.startsWith("-b"))
 						blockSize = parseIntArg("-b", arg.substring(2));
+					else if (arg.startsWith("-r"))
+						ringBufferSize = parseIntArg("-r", arg.substring(2));
 					else
 						throw new IllegalArgumentException("Unknown switch: " + arg);
 				}
@@ -118,7 +123,7 @@ public class FileStriper {
 			};
 		}
 		
-		FileStriper striper = new FileStriper(stripeCoder, blockSize, dataSize, checksumSize);
+		FileStriper striper = new FileStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
 		striper.stripe(inputChannel, outputChannels);
 	}
 	
@@ -156,12 +161,15 @@ public class FileStriper {
 		System.out.println("           must match the total between them.  If you specify only");
 		System.out.println("           one, or neither, they will be calculated using defaults");
 		System.out.println("           and the provided number of inputs");
+		System.out.println("     ---------------------------------------------------");
+		System.out.println("     extra stripe options");
+		System.out.println("     -r#   stripe ring buffer size");
 	}
 	
 	private <T> BlockingQueue<T> createQueue() {
-		//return new ArrayBlockingQueue<T>(3);
-		//return new LinkedBlockingDeque<T>(3);
-		return new RingBuffer<T>(3);
+		//return new ArrayBlockingQueue<T>(ringBufferSize);
+		//return new LinkedBlockingDeque<T>(ringBufferSize);
+		return new RingBuffer<T>(ringBufferSize);
 	}
 	
 	interface BlockingQueue<T> {
@@ -319,11 +327,11 @@ public class FileStriper {
 			writers[i].start();
 		
 		
-		BufferPool bufferPool = new BufferPool(3 * (dataSources + checksumSources) * blockSize);
+		BufferPool bufferPool = new BufferPool(ringBufferSize * (dataSources + checksumSources) * blockSize);
 		
 		// create three new stripes ready for reading, and queue them
 		try {
-			for (int i = 0; i < 3; i++)
+			for (int i = 0; i < ringBufferSize; i++)
 				readReady.put(new Stripe(bufferPool, dataSources, checksumSources, blockSize));
 		}
 		catch (InterruptedException e) {

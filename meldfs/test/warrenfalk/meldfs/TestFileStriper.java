@@ -232,7 +232,7 @@ public class TestFileStriper {
 		}
 
 		public FileStriper createStriper() {
-			return new FileStriper(coder, blockSize, dataCount, checksumCount);			
+			return new FileStriper(coder, blockSize, dataCount, checksumCount, 2);			
 		}
 		
 		void verifyWriteByte(int column, long position, byte b) {
