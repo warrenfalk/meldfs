@@ -132,51 +132,6 @@ public class ReedSolomonCodingDomain {
 		}
 		
 		/**
-		 * Calculates missing symbols in the code word from existing valid symbols in the code word. 
-		 * If any invalid checksum symbols are requested, all invalid data symbols, if any, will be automatically requested.
-		 * Any symbols that were specified as valid for this coder will be automatically unrequested
-		 * @param word the code word with valid symbols filled in
-		 * @param calcMask a bitmask specifying which symbols to calculate
-		 */
-		public void calculate(int[] word, long calcMask) {
-			// automatically clear any bits for calc that are already valid as there's nothing to do for these.
-			calcMask &= ~validMask;
-			// calculation of checksum values requires all data values to be valid. So if any data values are invalid and a checksum value was requested, automatically request the data symbols also
-			boolean invalidChecksum = 0 != (calcMask & checksumMask);
-			if (invalidChecksum)
-				calcMask |= (~validMask & dataMask);
-			// calculate data fields first
-			if (0 != (calcMask & dataMask)) {
-				int bit = 1;
-				for (int index = 0; index < dataSize; index++) {
-					if (0 != (bit & calcMask)) {
-						int symbol = 0;
-						// TODO: it's theoretically possible here to store the logarithms in the gf.mult() for the factor coming from the recovery matrix
-						for (int j = 0; j < dataSize; j++)
-							symbol = gf.add(symbol, gf.mult(recoveryMatrix.get(index, j), word[validSymbolMap[j]]));
-						word[index] = symbol;
-					}
-					bit <<= 1;
-				}
-			}
-			// calculate checksum
-			if (invalidChecksum) {
-				int bit = 1 << dataSize;
-				for (int index = 0; index < checksumSize; index++) {
-					if (0 != (bit & calcMask)) {
-						int symbol = 0;
-						// the checksum is equal to the sum of the products of each data symbol by the corresponding value in the coding matrix
-						// TODO: it's theoretically possible here to store the logarithms in the gf.mult() for the factor coming from the coding matrix
-						for (int k = 0; k < dataSize; k++)
-							symbol = gf.add(symbol, gf.mult(word[k], codingMatrix.get(dataSize + index, k)));
-						word[dataSize + index] = symbol;
-					}
-					bit <<= 1;
-				}
-			}
-		}
-		
-		/**
 		 * Calculates symbol data for specified buffers from valid buffers.
 		 * 
 		 * <ul>
@@ -257,14 +212,6 @@ public class ReedSolomonCodingDomain {
 				}
 			}
 			return result;
-		}
-		
-		/**
-		 * Automatically calculates all invalid symbols
-		 * @param codeWord the code word
-		 */
-		public void calculate(int[] codeWord) {
-			calculate(codeWord, ~validMask & (dataMask | checksumMask));
 		}
 		
 		/**
