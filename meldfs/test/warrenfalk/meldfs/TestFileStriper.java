@@ -5,15 +5,15 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
+import java.nio.channels.GatheringByteChannel;
+import java.nio.channels.ScatteringByteChannel;
 
 import org.junit.Test;
 
 public class TestFileStriper {
 
 	@Test
-	public void testMultiByteSource() throws IOException {
+	public void testMultiByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(2);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
@@ -22,7 +22,7 @@ public class TestFileStriper {
 	}
 	
 	@Test
-	public void testSingleBlockSource() throws IOException {
+	public void testSingleBlockSource() throws IOException, InterruptedException {
 		byte[] source = createSource(512);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
@@ -31,7 +31,7 @@ public class TestFileStriper {
 	}	
 		
 	@Test
-	public void testSingleBlockSingleByteSource() throws IOException {
+	public void testSingleBlockSingleByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(513);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
@@ -40,7 +40,7 @@ public class TestFileStriper {
 	}	
 		
 	@Test
-	public void testMultiStripeMultiByteSource() throws IOException {
+	public void testMultiStripeMultiByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(10 * 512 + 5);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
@@ -49,7 +49,7 @@ public class TestFileStriper {
 	}	
 		
 	@Test
-	public void testMultiStripeSingleBlockSource() throws IOException {
+	public void testMultiStripeSingleBlockSource() throws IOException, InterruptedException {
 		byte[] source = createSource(11 * 512);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
@@ -58,7 +58,7 @@ public class TestFileStriper {
 	}
 		
 	@Test
-	public void testMultiStripeSingleBlockSingleByteSource() throws IOException {
+	public void testMultiStripeSingleBlockSingleByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(11 * 512 + 5);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
 		FileStriper striper = stripeTest.createStriper();
@@ -67,7 +67,7 @@ public class TestFileStriper {
 	}
 
 	@Test
-	public void testTinyBlock() throws IOException {
+	public void testTinyBlock() throws IOException, InterruptedException {
 		int blockSize = 3;
 		byte[] source = createSource(11 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
@@ -77,7 +77,7 @@ public class TestFileStriper {
 	}
 
 	@Test
-	public void testLargeBlock() throws IOException {
+	public void testLargeBlock() throws IOException, InterruptedException {
 		int blockSize = 4096;
 		byte[] source = createSource(11 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
@@ -87,7 +87,7 @@ public class TestFileStriper {
 	}
 
 	@Test
-	public void testLongStripe() throws IOException {
+	public void testLongStripe() throws IOException, InterruptedException {
 		int blockSize = 16;
 		byte[] source = createSource(24 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 20, 3);
@@ -97,7 +97,7 @@ public class TestFileStriper {
 	}
 
 	@Test
-	public void testShortStripe() throws IOException {
+	public void testShortStripe() throws IOException, InterruptedException {
 		int blockSize = 16;
 		byte[] source = createSource(4 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 2, 1);
@@ -107,7 +107,7 @@ public class TestFileStriper {
 	}
 
 	@Test
-	public void testHundredStripeSource() throws IOException {
+	public void testHundredStripeSource() throws IOException, InterruptedException {
 		int blockSize = 16;
 		byte[] source = createSource(700 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
@@ -131,8 +131,8 @@ public class TestFileStriper {
 		final int dataCount;
 		final int checksumCount;
 		final StripeCoder coder;
-		final ReadableByteChannel input;
-		final WritableByteChannel[] outputs;
+		final ScatteringByteChannel input;
+		final GatheringByteChannel[] outputs;
 		final long[] outsizes;
 		
 		StripeTest(final byte[] bytes, final int blockSize, final int dataCount, final int checksumCount) {
@@ -180,10 +180,10 @@ public class TestFileStriper {
 			
 			input = new MemoryChannel(bytes);
 			
-			outputs = new WritableByteChannel[dataCount + checksumCount];
+			outputs = new GatheringByteChannel[dataCount + checksumCount];
 			for (int i = 0; i < outputs.length; i++) {
 				final int column = i;
-				outputs[i] = new WritableByteChannel() {
+				outputs[i] = new GatheringByteChannel() {
 					long position = 0;
 					boolean open;
 
@@ -207,6 +207,23 @@ public class TestFileStriper {
 							len++;
 						}
 						return len;
+					}
+
+					@Override
+					public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
+						long len = 0;
+						for (int i = 0; i < length; i++) {
+							int written = write(srcs[offset + i]);
+							if (written == -1)
+								break;
+							len += written;
+						}
+						return len;
+					}
+
+					@Override
+					public long write(ByteBuffer[] srcs) throws IOException {
+						return write(srcs, 0, srcs.length);
 					}
 				};
 			}
@@ -294,7 +311,7 @@ public class TestFileStriper {
 		}
 	}
 	
-	static class MemoryChannel implements ReadableByteChannel {
+	static class MemoryChannel implements ScatteringByteChannel {
 		final ByteBuffer bb;
 		boolean open;
 		
@@ -322,6 +339,23 @@ public class TestFileStriper {
 			dst.put(src);
 			bb.position(bb.position() + limit);
 			return limit;
+		}
+
+		@Override
+		public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+			long len = 0;
+			for (int i = 0; i < length; i++) {
+				int read = read(dsts[offset + i]);
+				if (read == -1)
+					return (len == 0) ? -1 : len;
+				len += read;
+			}
+			return len;
+		}
+
+		@Override
+		public long read(ByteBuffer[] dsts) throws IOException {
+			return read(dsts, 0, dsts.length);
 		}
 	}
 
