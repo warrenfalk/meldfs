@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain;
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain.Coder;
@@ -24,6 +25,12 @@ public class FileStriper {
 	final int checksumSources;
 	final int ringBufferSize;
 	final StripeCoder stripeCoder;
+	long readTime;
+	long[] writeTime;
+	AtomicLong calcTime;
+	AtomicInteger currentWriters;
+	long writeStartTime;
+	long totalWriteTime;
 	
 	final static ExecutorService threadPool = Executors.newCachedThreadPool();
 
@@ -33,6 +40,9 @@ public class FileStriper {
 		this.checksumSources = checksumSources;
 		this.stripeCoder = stripeCoder;
 		this.ringBufferSize = ringBufferSize;
+		this.writeTime = new long[dataSources + checksumSources];
+		this.calcTime = new AtomicLong();
+		this.currentWriters = new AtomicInteger();
 	}
 	
 	public static void main(String[] args) throws IOException, InterruptedException {
@@ -125,10 +135,23 @@ public class FileStriper {
 			};
 		}
 		
+		long start = System.nanoTime();
 		FileStriper striper = new FileStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
 		striper.stripe(inputChannel, outputChannels);
+		long end = System.nanoTime();
+		System.out.println("Wall Clock: " + format(end - start));
+		System.out.println("      Read: " + format(striper.readTime));
+		System.out.println("     Write: " + format(striper.totalWriteTime));
+		for (int c = 0; c < outputChannels.length; c++)
+			System.out.println("  Write[" + c + "]: " + format(striper.writeTime[c]));
+		System.out.println("      Calc: " + format(striper.calcTime.longValue()));
 	}
 	
+	private static String format(long nanoTime) {
+		double seconds = (double)nanoTime / (double)1000000000.0;
+		return "" + (Math.floor(seconds * 100.0) / 100.0);
+	}
+
 	private static int parseIntArg(String argswitch, String argval) {
 		int radix = 10;
 		if (argval.startsWith("0x")) {
@@ -266,15 +289,28 @@ public class FileStriper {
 			final StripeFrameFifo writeQueue = writeQueues[i];
 			Thread writer = new Thread("Striper Writer [" + column + "]") {
 				public void run() {
+					long start, end;
 					try {
 						for (;;) {
 							if (status.isCanceled())
 								return;
 							StripeFrame frame = writeQueue.take();
 							try {
-								if (column >= dataSources)
+								if (column >= dataSources) {
+									start = System.nanoTime();
 									frame.matrix.calculate(stripeCoder, 1 << column);
+									end = System.nanoTime();
+									calcTime.addAndGet(end - start);
+								}
+								int x = currentWriters.incrementAndGet();
+								start = System.nanoTime();
 								frame.matrix.writeColumn(column, output);
+								end = System.nanoTime();
+								if (x == 1)
+									writeStartTime = start;
+								if (0 == currentWriters.decrementAndGet())
+									totalWriteTime += (end - writeStartTime);
+								writeTime[column] += (end - start);
 								if (frame.eof)
 									break;
 							}
@@ -299,7 +335,10 @@ public class FileStriper {
 
 		for (;;) {
 			StripeFrame frame = readQueue.take();
+			long start = System.nanoTime();
 			long size = frame.matrix.readStripes(input);
+			long end = System.nanoTime();
+			readTime += (end - start);
 			if (size < frame.matrix.getTotalDataSize())
 				frame.eof = true;
 			frame.resetLock(writeQueues.length);
