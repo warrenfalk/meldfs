@@ -100,6 +100,51 @@ public class TestReedSolomonCoding {
 			}
 		}
 	}
+	
+	@Test
+	public void testCalculateJaggedStripe() {
+		int dataSize = 3;
+		int checksumSize = 2;
+		
+		ByteBuffer[] columns = new ByteBuffer[] {
+				ByteBuffer.allocate(16),
+				ByteBuffer.allocate(14),
+				ByteBuffer.allocate(2),
+				ByteBuffer.allocate(16),
+				ByteBuffer.allocate(16),
+		};
+		
+		//ByteBuffer data = ByteBuffer.wrap("four score and seven years ago\0\0 o\0\0\0\0\0\0\0\0\0\0\0\0\0\0".getBytes());
+		ByteBuffer data = ByteBuffer.wrap("four score and seven years ago o".getBytes());
+		
+		for (int i = 0; i < dataSize; i++) {
+			columns[i].put((ByteBuffer)data.limit(data.position() + columns[i].limit()));
+		}
+		
+		ReedSolomonCodingDomain domain = new ReedSolomonCodingDomain(dataSize, checksumSize);
+		Coder coder = domain.getChecksumCoder();
+		long size = coder.calculate(columns);
+		
+		assertEquals("size after jagged calculation", 32, size);
+		
+		ByteBuffer[] expected = new ByteBuffer[] {
+				ByteBuffer.wrap(new byte[] { (byte)0x23, (byte)0x76, (byte)0x10, (byte)0x1c, (byte)0x00, (byte)0x0a, (byte)0x06, (byte)0x0e, (byte)0x00, (byte)0x16, (byte)0x00, (byte)0x00, (byte)0x09, (byte)0x0b, (byte)0x20, (byte)0x73 }),
+				ByteBuffer.wrap(new byte[] { (byte)0xf7, (byte)0xa7, (byte)0xd6, (byte)0xa3, (byte)0xe0, (byte)0x14, (byte)0x04, (byte)0x60, (byte)0x43, (byte)0x96, (byte)0xe0, (byte)0x3a, (byte)0x5f, (byte)0x79, (byte)0xfd, (byte)0xfb }),
+		};
+		
+		assertContentEqual("checksum buffer 0", expected[0], columns[dataSize + 0]);
+		assertContentEqual("checksum buffer 0", expected[1], columns[dataSize + 1]);
+		
+		/*
+		for (int i = 0; i < checksumSize; i++) {
+			ByteBuffer cc = columns[dataSize + i];
+			for (int p = 0; p < cc.limit(); p++)
+				System.out.print(", (byte)0x" + hex(cc.get()));
+			System.out.println();
+		}
+		*/
+		
+	}
 
 	private void assertContentEqual(String message, ByteBuffer expected, ByteBuffer actual) {
 		assertTrue(message + ", comparing limits", actual.limit() >= expected.limit());
