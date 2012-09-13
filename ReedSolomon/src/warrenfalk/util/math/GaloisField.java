@@ -5,9 +5,9 @@ public final class GaloisField {
 	public final int primitive;
 	public final int size;
 	public final int mask;
-	final int[] log;
-	final int[] invlog;
-	final int[] inv;
+	public final int[] log;
+	public final int[] invlog;
+	public final int[] inv;
 	
 	public final static GaloisField GF4 = new GaloisField(2, 7);
 	public final static GaloisField GF8 = new GaloisField(3, 11); // or 13
@@ -25,7 +25,7 @@ public final class GaloisField {
 		this.size = 1 << bits;
 		this.mask = this.size - 1;
 		log = new int[size];
-		invlog = new int[size];
+		invlog = new int[size << 1];
 		inv = new int[size];
 		int b = 1;
 		for (int i = 0; i < size; i++) {
@@ -34,6 +34,9 @@ public final class GaloisField {
 			b = b << 1;
 			if (0 != (b & size))
 				b = b ^ primitive;
+		}
+		for (int i = size - 1; i < (size * 2); i++) {
+			invlog[i] = invlog[i - (size - 1)];
 		}
 		// calculate inverses
 		for (int i = 2; i < size; i++) {
@@ -75,11 +78,7 @@ public final class GaloisField {
 			return a;
 		if (a == 1)
 			return b;
-		int w = size - 1;
-		int i = log[a] + log[b];
-		if (i >= w)
-			i -= w;
-		return invlog[i];
+		return invlog[log[a] + log[b]];
 		/*
 		// This performs multiplication without log tables
 		int t = 0;

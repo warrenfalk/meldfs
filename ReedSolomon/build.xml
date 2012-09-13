@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="build" name="ReedSolomon Project Builder">
+    <presetdef name="javac">
+        <javac includeantruntime="false" debug="true"/>
+    </presetdef>
+    
+    <target name="clean">
+        <delete dir="bin"/>
+        <delete dir="include"/>
+    </target>
+    
+    <target name="build">
+        <mkdir dir="include"/>
+        <mkdir dir="bin"/>
+        <javac srcdir="src" destdir="bin">
+            <sourcepath>
+                <pathelement path="./src/warrenfalk/reedsolomon/ReedSolomonNative.java"/>
+            </sourcepath>
+        </javac>
+        <javah class="warrenfalk.reedsolomon.ReedSolomonNative" destdir="include" classpath="bin">
+        </javah>
+        <exec executable="make" failonerror="true" failifexecutionfails="true" searchpath="true">
+            <env key="JAVA_HOME" value="${java.home}"/>
+        </exec>
+        <javac destdir="bin" classpath="${project.classpath}">
+            <src>
+	            <pathelement path="./src/"/>
+	            <pathelement path="./test/"/>
+            </src>
+        </javac>
+    </target>
+</project>
