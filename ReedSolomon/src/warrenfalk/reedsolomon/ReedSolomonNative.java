@@ -119,28 +119,18 @@ public class ReedSolomonNative {
 		}
 	}
 
-	static native int nativeCalc(int dataSize, long calcMask, int height, int[] lengths, ByteBuffer[] columns, ByteBuffer matrix, ByteBuffer gflog, ByteBuffer gfinvlog, int gfbits, long gfprimitive);
+	static native int nativeCalc(int dataSize, long calcMask, int height, int[] lengths, ByteBuffer[] columns, ByteBuffer matrix, int[] recoveryMap, ByteBuffer gflog, ByteBuffer gfinvlog, int gfbits, long gfprimitive);
 	
 	public int recover(ByteBuffer[] columns, long calcMask, int height) {
-		columns = remapColumns(columns, recoveryMap);
 		int[] lengths = getLengths(columns);
-		return nativeCalc(dataSize, calcMask, height, lengths, columns, recoveryMatrixBuffer, gflogBuffer, gfinvlogBuffer, gfbits, gfprimitive);
+		return nativeCalc(dataSize, calcMask, height, lengths, columns, recoveryMatrixBuffer, recoveryMap, gflogBuffer, gfinvlogBuffer, gfbits, gfprimitive);
 	}
 	
 	private final static ThreadLocal<ByteBuffer[]> _columns = new ThreadLocal<ByteBuffer[]>();
 	
-	private ByteBuffer[] remapColumns(ByteBuffer[] columns, int[] recoveryMap) {
-		ByteBuffer[] columnsOut = _columns.get();
-		if (columnsOut == null || columnsOut.length < columns.length)
-			_columns.set(columnsOut = new ByteBuffer[columns.length]);
-		for (int i = 0; i < recoveryMap.length; i++)
-			columnsOut[i] = columns[recoveryMap[i]];
-		return columnsOut;
-	}
-	
 	public int checksum(ByteBuffer[] columns, long calcMask, int height) {
 		int[] lengths = getLengths(columns);
-		return nativeCalc(dataSize, calcMask, height, lengths, columns, codingMatrixBuffer, gflogBuffer, gfinvlogBuffer, gfbits, gfprimitive);
+		return nativeCalc(dataSize, calcMask, height, lengths, columns, codingMatrixBuffer, null, gflogBuffer, gfinvlogBuffer, gfbits, gfprimitive);
 	}
 	
 	private final static ThreadLocal<int[]> _lengths = new ThreadLocal<int[]>();

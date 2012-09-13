@@ -9,14 +9,22 @@ jclass byteBufferClass = 0;
 jmethodID byteBufferArrayMethod;
 jmethodID byteBufferArrayOffsetMethod;
 
-union ssereg {
-	__int128 ssereg;
-	__m128i sse;
-	unsigned char bytes[SSEBYTES];
-};
+unsigned char ** getMappedColumns(int columnCount, unsigned char **ppColumns, JNIEnv* env, jintArray recoveryMap)
+{
+	if (!recoveryMap)
+		return ppColumns;
+	jint *map = (jint*)malloc(sizeof(jint) * columnCount);
+	unsigned char **ppMapped = (unsigned char**)malloc(sizeof(unsigned char*) * columnCount);
+	map = (*env)->GetIntArrayElements(env, recoveryMap, 0);
+	int mapCount = (*env)->GetArrayLength(env, recoveryMap);
+	for (int i = 0; i < columnCount; i++)
+		 ppMapped[i] = (i < mapCount) ? ppColumns[map[i]] : ppColumns[i];
+	(*env)->ReleaseIntArrayElements(env, recoveryMap, map, 0);
+	return ppMapped;
+}
 
 JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
-  (JNIEnv *env, jclass me, jint dataSize, jlong calcMask, jint height, jintArray lengths, jobjectArray columns, jobject matrix, jobject gflog, jobject gfinvlog, jint gfbits, jlong gfprimitive)
+  (JNIEnv *env, jclass me, jint dataSize, jlong calcMask, jint height, jintArray lengths, jobjectArray columns, jobject matrix, jintArray recoveryMap, jobject gflog, jobject gfinvlog, jint gfbits, jlong gfprimitive)
 {
 	// get the number of columns
 	jsize columnCount = (*env)->GetArrayLength(env, columns);
@@ -24,6 +32,7 @@ JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
 	jint *pColumnSizes = (*env)->GetIntArrayElements(env, lengths, 0);
 	// allocate an array of addresses for the columns
 	unsigned char **ppColumns = (unsigned char**)malloc(sizeof(unsigned char*) * columnCount);
+	unsigned char **ppMappedColumns;
 	int isUsingNonDirectBuffers = 0;
 	int unaligned = 0;
 	for (int i = 0; i < columnCount; i++) {
@@ -43,17 +52,18 @@ JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
 		if (0 != ((uint64_t)ppColumns[i] % 16))
 			unaligned = 1;
 	}
+	ppMappedColumns = getMappedColumns(columnCount, ppColumns, env, recoveryMap);
 	// get the matrix address
 	unsigned char *pMatrix = (*env)->GetDirectBufferAddress(env, matrix);
 	// initialize the galois field lookup table addresses
 	unsigned char *pGflog = 0;
-	int gfsize = 0;
+	//int gfsize = 0;
 	if (gflog) {
 		pGflog = (*env)->GetDirectBufferAddress(env, gflog);
-		gfsize = (*env)->GetDirectBufferCapacity(env, gflog);
+		//gfsize = (*env)->GetDirectBufferCapacity(env, gflog);
 	}
 	else {
-		gfsize = 1 << gfbits;
+		//gfsize = 1 << gfbits;
 	}
 	unsigned char *pGfinvlog = 0;
 	if (gfinvlog)
@@ -71,12 +81,9 @@ JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
 	unsigned char symbol;
 
 	__m128i symbolgroup;
-	union ssereg datagroup;
 	unsigned char* codegroup;
-	union ssereg calcgroup;
-	__m128i zero;
+	__m128i zero = _mm_setzero_si128();
 	__m128i cmp;
-	zero = _mm_setzero_si128();
 	for (int c = 0; c < columnCount; c++) {
 		if (calcMask & (1 << c)) {
 			unsigned char *pColumn = ppColumns[c];
@@ -97,23 +104,23 @@ JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
 				}
 			}
 			else {
+				// SSE2
 				codegroup = pMatrix + c * dataSize;
 				for (int position = 0; position < height; position += SSEBYTES) {
-					// SSE2
 					symbolgroup = _mm_setzero_si128();
 					for (int k = 0; k < dataSize; k++) {
-						unsigned char b = codegroup[k];
-						datagroup.sse = _mm_load_si128((__m128i*)(ppColumns[k] + position));
+						unsigned char logb = pGflog[codegroup[k]];
+						unsigned char* datagroupBytes = ppMappedColumns[k] + position;
+						unsigned char calcgroupBytes[SSEBYTES];
 						for (int i = 0; i < SSEBYTES; i++)
-							calcgroup.bytes[i] = pGflog[datagroup.bytes[i]];
-						unsigned char logb = pGflog[b];
-						for (int i = 0; i < SSEBYTES; i++)
-							calcgroup.bytes[i] = pGfinvlog[pGflog[datagroup.bytes[i]] + logb];
-						cmp = _mm_cmpeq_epi8(datagroup.sse, zero);
-						calcgroup.sse = _mm_andnot_si128(cmp, calcgroup.sse);
-						symbolgroup = _mm_xor_si128(symbolgroup, calcgroup.sse);
+							calcgroupBytes[i] = pGfinvlog[pGflog[datagroupBytes[i]]+logb];
+						__m128i datagroup = *(__m128i*)datagroupBytes;
+						cmp = _mm_cmpeq_epi8(datagroup, zero);
+						__m128i calcgroup = *(__m128i*)calcgroupBytes;
+						calcgroup = _mm_andnot_si128(cmp, calcgroup);
+						symbolgroup = _mm_xor_si128(symbolgroup, calcgroup);
 					}
-					_mm_store_si128((__m128i*)(pColumn + position), symbolgroup);
+					*(__m128i*)(pColumn + position) = symbolgroup;
 				}
 			}
 			result += height;
@@ -121,6 +128,9 @@ JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
 	}
 	//------------------------------------------------------------
 
+	if (ppMappedColumns != ppColumns) {
+		free(ppMappedColumns);
+	}
 	if (isUsingNonDirectBuffers) {
 		for (int i = 0; i < columnCount; i++) {
 			jobject column = (*env)->GetObjectArrayElement(env, columns, i);
@@ -128,7 +138,7 @@ JNIEXPORT jint JNICALL Java_warrenfalk_reedsolomon_ReedSolomonNative_nativeCalc
 			if (addr == 0) {
 				jobject bytes = (*env)->CallObjectMethod(env, column, byteBufferArrayMethod);
 				// TODO: pass JNI_ABORT as the last parameter unless we wrote to this column
-				(*env)->ReleaseByteArrayElements(env, bytes, (jbyte *)ppColumns[i], 0);
+				(*env)->ReleaseByteArrayElements(env, bytes, (jbyte *)ppColumns[i], ((1 << i) & calcMask) ? 0 : JNI_ABORT);
 			}
 		}
 	}
