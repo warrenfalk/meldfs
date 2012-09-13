@@ -1,7 +1,12 @@
 CFLAGS=-std=c99 -O3
 JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64/jre
 
-.PHONY : native
+.PHONY : native clean build
+
+build : bin/native/reedsolomon.so
+
+clean :
+	rm -rf bin/native
 
 bin/native/reedsolomon.so : src/warrenfalk/reedsolomon/ReedSolomonNative.c
 	mkdir -p `dirname $@`
