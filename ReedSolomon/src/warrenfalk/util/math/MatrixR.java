@@ -10,14 +10,16 @@ import java.util.Formatter;
 public final class MatrixR {
 	public final int[] values;
 	public final int width;
+	public final int height;
 	
 	public MatrixR(final int rows, final int cols) {
+		height = rows;
 		width = cols;
 		values = new int[rows * cols];
 	}
 	
 	public MatrixR(final int[][] source) {
-		int height = source.length;
+		height = source.length;
 		width = source[0].length;
 		values = new int [height * width];
 		for (int i = 0; i < height; i++)
