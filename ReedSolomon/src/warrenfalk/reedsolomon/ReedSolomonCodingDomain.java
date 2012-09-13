@@ -10,12 +10,12 @@ import warrenfalk.util.math.MatrixR;
  * @author Warren Falk
  */
 public class ReedSolomonCodingDomain {
-	private final MatrixR codingMatrix;
-	private final int dataSize;
-	private final int checksumSize;
-	private final int dataMask;
-	private final int checksumMask;
-	private final GaloisField gf;
+	final MatrixR codingMatrix;
+	final int dataSize;
+	final int checksumSize;
+	final int dataMask;
+	final int checksumMask;
+	final GaloisField gf;
 	private final Coder checksumCoder;
 	
 	/**
@@ -98,6 +98,7 @@ public class ReedSolomonCodingDomain {
 		final long validMask;
 		final MatrixR recoveryMatrix;
 		final int[] validSymbolMap;
+		ReedSolomonNative nativeHelper;
 		
 		/**
 		 * Construct a coder which can calculate symbols from the symbols specified in <code>validMask</code> 
@@ -129,6 +130,12 @@ public class ReedSolomonCodingDomain {
 				recoveryMatrix = null;
 				validSymbolMap = null;
 			}
+			
+			nativeHelper = ReedSolomonNative.getNativeHelper(this);
+		}
+		
+		public ReedSolomonCodingDomain getDomain() {
+			return ReedSolomonCodingDomain.this;
 		}
 		
 		/**
@@ -164,27 +171,32 @@ public class ReedSolomonCodingDomain {
 			boolean invalidChecksum = 0 != (calcMask & checksumMask);
 			if (invalidChecksum)
 				calcMask |= (~validMask & dataMask);
+			
 			// calculate data fields first
 			if (0 != (calcMask & dataMask)) {
 				int bit = 1;
-				for (int index = 0; index < dataSize; index++) {
-					if (0 != (bit & calcMask)) {
-						ByteBuffer buffer = columns[index];
-						// set the height
-						buffer.limit(calcedHeight);
-						for (int position = 0; position < calcedHeight; position++) {
-							int symbol = 0;
-							for (int j = 0; j < dataSize; j++) {
-								ByteBuffer dataColumn = columns[validSymbolMap[j]];
-								symbol = gf.add(symbol, gf.mult(recoveryMatrix.get(index, j), (position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF));
-							}
-							buffer.put(position, (byte)(symbol & 0xFF));
-						}						
-						buffer.position(calcedHeight);
-						buffer.flip();
-						result += calcedHeight;
+				if (nativeHelper != null) {
+					result += nativeHelper.recover(columns, calcMask & dataMask, calcedHeight);
+				}
+				else {
+					for (int index = 0; index < dataSize; index++) {
+						if (0 != (bit & calcMask)) {
+							ByteBuffer buffer = columns[index];
+							// set the height
+							buffer.limit(calcedHeight);
+							for (int position = 0; position < calcedHeight; position++) {
+								int symbol = 0;
+								for (int j = 0; j < dataSize; j++) {
+									ByteBuffer dataColumn = columns[validSymbolMap[j]];
+									symbol = gf.add(symbol, gf.mult(recoveryMatrix.get(index, j), (position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF));
+								}
+								buffer.put(position, (byte)(symbol & 0xFF));
+							}						
+							buffer.position(0);
+							result += calcedHeight;
+						}
+						bit <<= 1;
 					}
-					bit <<= 1;
 				}
 			}
 			// calculate checksum
@@ -195,20 +207,31 @@ public class ReedSolomonCodingDomain {
 						ByteBuffer buffer = columns[dataSize + c];
 						// set the height
 						buffer.limit(calcedHeight);
-						for (int position = 0; position < calcedHeight; position++) {
-							int symbol = 0;
-							// the checksum is equal to the sum of the products of each data symbol by the corresponding value in the coding matrix
-							for (int k = 0; k < dataSize; k++) {
-								ByteBuffer dataColumn = columns[k];
-								symbol = gf.add(symbol, gf.mult((position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF, codingMatrix.get(dataSize + c, k)));
-							}
-							buffer.put(position, (byte)(symbol & 0xFF));
-						}
 						if (buffer.position() != 0)
 							buffer.position(0);
-						result += calcedHeight;
 					}
 					bit <<= 1;
+				}
+				if (nativeHelper != null) {
+					result += nativeHelper.checksum(columns, calcMask & checksumMask, calcedHeight);
+				}
+				else {
+					bit = 1 << dataSize;
+					for (int c = dataSize; c < columns.length; c++) {
+						if (0 != (calcMask & bit)) {
+							for (int position = 0; position < calcedHeight; position++) {
+								int symbol = 0;
+								// the checksum is equal to the sum of the products of each data symbol by the corresponding value in the coding matrix
+								for (int k = 0; k < dataSize; k++) {
+									ByteBuffer dataColumn = columns[k];
+									symbol = gf.add(symbol, gf.mult((position < dataColumn.limit() ? dataColumn.get(position) : 0) & 0xFF, codingMatrix.get(c, k)));
+								}
+								columns[c].put(position, (byte)(symbol & 0xFF));
+							}
+							result += calcedHeight;
+						}
+						bit <<= 1;
+					}
 				}
 			}
 			return result;
