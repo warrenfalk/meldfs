@@ -14,10 +14,13 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.lang3.StringUtils;
 
 import warrenfalk.fuselaj.DirBuffer;
 import warrenfalk.fuselaj.Errno;
@@ -78,32 +81,92 @@ public class MeldFs extends FuselajFs {
 	 * @throws IOException 
 	 */
 	public static void main(String[] args) throws IOException {
-		// TODO: Debugging code follows
-		boolean debug = true;
-		FileSystem fs = FileSystems.getDefault();
-		Path mountPoint = fs.getPath("/dev/shm/test");
-		if (!Files.exists(mountPoint))
-			Files.createDirectories(mountPoint);
-		Path[] devices = new Path[] {
-				fs.getPath("/home/warren/test/0"),
-				fs.getPath("/home/warren/test/1"),
-				fs.getPath("/home/warren/test/2"),
-				fs.getPath("/home/warren/test/3"),
-				fs.getPath("/home/warren/test/4"),
-				fs.getPath("/home/warren/test/5"),
-		};
-		//String options = "allow_other,use_ino,big_writes";
-		String options = "allow_other,big_writes";
-		for (Path device : devices) {
-			if (!Files.exists(device))
-				Files.createDirectories(device);
+		boolean debug = false;
+		try {
+			HashSet<String> fuseOptions = new HashSet<>();
+			fuseOptions.add("big_writes");
+			fuseOptions.add("direct_io");
+			// fuseOptions.add("use_ino"); <- not in the meldfs model because there is no persistently consistent inode 
+			// fuseOptions.add("allow_other"); <- allowed, but should be user-specified
+			
+			ArrayList<Path> pathList = new ArrayList<>();
+			Path mountPoint = null;
+			for (int i = 0; i < args.length; i++) {
+				String arg = args[i];
+				if (arg.startsWith("-")) {
+					if (arg.startsWith("-o")) {
+						String optionString = null;
+						if (arg.length() > 2)
+							optionString = arg.substring(2);
+						else if ((i + 1) < args.length)
+							optionString = args[++i];
+						else {
+							throw new RuntimeException("Switch -o requires an argument");
+						}
+						String[] options = optionString.split(",");
+						for (String option : options) {
+							if (option.startsWith("meld_")) {
+								String[] optval = option.split("=", 2);
+								String name = optval[0];
+								String value = (optval.length >= 2) ? optval[1] : "";
+								if ("meld_debug".equals(name)) {
+									debug = !"false".equals(value);
+								}
+								else if ("meld_paths".equals(name)) {
+									String[] paths = value.split(":");
+									for (String path : paths)
+										pathList.add(FileSystems.getDefault().getPath(path));
+								}
+							}
+							else {
+								fuseOptions.add(option);
+							}
+						}
+					}
+					else {
+						throw new RuntimeException("Unknown switch: " + arg);
+					}
+				}
+				else if (mountPoint == null) {
+					mountPoint = FileSystems.getDefault().getPath(arg);
+				}
+				else {
+					throw new RuntimeException("Unexpected argument: " + arg);
+				}
+			}
+			
+			if (mountPoint == null) {
+				throw new RuntimeException("No mount point specified");
+			}
+			
+			Path[] paths = pathList.toArray(new Path[pathList.size()]);
+			if (paths.length == 0) {
+				System.err.println("No source paths specified; use meld_paths=path1:path2:path3 mount option");
+				System.exit(1);
+			}
+			
+			MeldFs mfs = new MeldFs(mountPoint, paths, debug, join(",", fuseOptions));
+			int exitCode = mfs.run();
+			System.exit(exitCode);
 		}
-		
-		MeldFs mfs = new MeldFs(mountPoint, devices, debug, options);
-		int exitCode = mfs.run();
-		System.exit(exitCode);
+		catch (Exception e) {
+			System.err.println(e.getMessage());
+			if (debug)
+				e.printStackTrace();
+		}
 	}
 	
+	private static <T> String join(String separator, Iterable<T> elements) {
+		StringBuilder sb = new StringBuilder();
+		Iterator<T> i = elements.iterator();
+		if (!i.hasNext())
+			return "";
+		sb.append(i.next());
+		while (i.hasNext())
+			sb.append(separator).append(i.next());
+		return sb.toString();
+	}
+
 	@Override
 	protected void getattr(Path path, Stat stat) throws FilesystemException {
 		// attempt to find entry with that name

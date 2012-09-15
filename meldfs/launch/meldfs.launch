@@ -8,6 +8,6 @@
 <listEntry value="1"/>
 </listAttribute>
 <stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="warrenfalk.meldfs.MeldFs"/>
-<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="-d /dev/shm/test -o allow_other,use_ino,big_writes"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="/dev/shm/test -o allow_other,meld_debug,meld_paths=/home/warren/test/0:/home/warren/test/1:/home/warren/test/2:/home/warren/test/3:/home/warren/test/4:/home/warren/test/5"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="meldfs"/>
 </launchConfiguration>
