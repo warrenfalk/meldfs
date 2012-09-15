@@ -9,15 +9,16 @@ public class Debug {
 
 	public static void main(String[] args) {
 		int data = 5;
+		int blockSize = 512;
 		
 		ByteBuffer[] columns = new ByteBuffer[] {
-				ByteBuffer.allocateDirect(512),
-				ByteBuffer.allocateDirect(512),
-				ByteBuffer.allocateDirect(512),
-				ByteBuffer.allocateDirect(512),
-				ByteBuffer.allocateDirect(512),
-				ByteBuffer.allocateDirect(512),
-				ByteBuffer.allocateDirect(512),
+				ByteBuffer.allocateDirect(blockSize),
+				ByteBuffer.allocateDirect(blockSize),
+				ByteBuffer.allocateDirect(blockSize),
+				ByteBuffer.allocateDirect(blockSize),
+				ByteBuffer.allocateDirect(blockSize),
+				ByteBuffer.allocateDirect(blockSize),
+				ByteBuffer.allocateDirect(blockSize),
 		};
 		
 		Random rand = new Random();
