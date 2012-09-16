@@ -1,23 +1,13 @@
 package warrenfalk.meldfs;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-import warrenfalk.reedsolomon.ReedSolomonCodingDomain;
-import warrenfalk.reedsolomon.ReedSolomonCodingDomain.Coder;
 
 public class ChannelStriper {
 	final int blockSize;
