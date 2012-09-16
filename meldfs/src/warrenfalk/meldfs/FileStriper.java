@@ -13,6 +13,20 @@ import warrenfalk.reedsolomon.ReedSolomonCodingDomain;
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain.Coder;
 
 public class FileStriper {
+	
+	final StripeCoder coder;
+	final int dataSize;
+	final int checksumSize;
+	final int ringBufferSize;
+	int blockSize;
+	
+	public FileStriper(StripeCoder coder, int dataSize, int checksumSize, int ringBufferSize) {
+		this.coder = coder;
+		this.dataSize = dataSize;
+		this.checksumSize = checksumSize;
+		this.ringBufferSize = ringBufferSize;
+	}
+	
 	public static void main(String[] args) throws IOException, InterruptedException {
 		// No args? Print usage
 		if (args.length == 0) {
@@ -84,17 +98,6 @@ public class FileStriper {
 			System.exit(2);
 		}
 		
-		// Open the input file and output files
-		FileSystem fs = FileSystems.getDefault();
-		Path inputPath = fs.getPath(inputArg);
-		Path[] outputPaths = new Path[outputArgs.size()];
-		for (int i = 0; i < outputArgs.size(); i++)
-			outputPaths[i] = fs.getPath(outputArgs.get(i));
-		FileChannel inputChannel = FileChannel.open(inputPath, StandardOpenOption.READ);
-		FileChannel[] outputChannels = new FileChannel[outputPaths.length];
-		for (int i = 0; i < outputChannels.length; i++)
-			outputChannels[i] = FileChannel.open(outputPaths[i], StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-		
 		// Create a stripe coder, based on given protocol
 		StripeCoder stripeCoder = null;
 		if ("R".equals(protocol)) {
@@ -108,21 +111,56 @@ public class FileStriper {
 			};
 		}
 		
-		// Create our striper and begin the actual striping
+		FileStriper striper = new FileStriper(stripeCoder, dataSize, checksumSize, ringBufferSize);
+		
+		// Open the input file and output files
+		FileSystem fs = FileSystems.getDefault();
+		Path inputPath = fs.getPath(inputArg);
+		Path[] outputPaths = new Path[outputArgs.size()];
+		for (int i = 0; i < outputArgs.size(); i++)
+			outputPaths[i] = fs.getPath(outputArgs.get(i));
+		
 		long start = System.nanoTime();
-		ChannelStriper striper = new ChannelStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
-		striper.stripe(inputChannel, outputChannels);
+		ChannelStriper channelStriper = striper.createChannelStriper(blockSize);
+		striper.stripe(channelStriper, inputPath, outputPaths);
 		long end = System.nanoTime();
 		if (showPerformanceIndicators) {
 			System.out.println("Wall Clock: " + format(end - start));
-			System.out.println("      Read: " + format(striper.readTime));
-			System.out.println("     Write: " + format(striper.totalWriteTime));
-			for (int c = 0; c < outputChannels.length; c++)
-				System.out.println("  Write[" + c + "]: " + format(striper.writeTime[c]));
-			System.out.println("      Calc: " + format(striper.calcTime.longValue()));
+			System.out.println("      Read: " + format(channelStriper.readTime));
+			System.out.println("     Write: " + format(channelStriper.totalWriteTime));
+			for (int c = 0; c < outputPaths.length; c++)
+				System.out.println("  Write[" + c + "]: " + format(channelStriper.writeTime[c]));
+			System.out.println("      Calc: " + format(channelStriper.calcTime.longValue()));
 		}
 	}
 	
+	public ChannelStriper createChannelStriper(int blockSize) {
+		return new ChannelStriper(coder, blockSize, dataSize, checksumSize, ringBufferSize);		
+	}
+	
+	public void stripe(Path inputPath, Path[] outputPaths, int blockSize) throws IOException, InterruptedException {
+		ChannelStriper channelStriper = createChannelStriper(blockSize);
+		stripe(channelStriper, inputPath, outputPaths);
+	}
+	
+	public void stripe(ChannelStriper striper, Path inputPath, Path[] outputPaths) throws IOException, InterruptedException {
+		FileChannel inputChannel = null;
+		FileChannel[] outputChannels = new FileChannel[outputPaths.length];
+		try {
+			inputChannel = FileChannel.open(inputPath, StandardOpenOption.READ);
+			for (int i = 0; i < outputChannels.length; i++)
+				outputChannels[i] = FileChannel.open(outputPaths[i], StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+			striper.stripe(inputChannel, outputChannels);
+		}
+		finally {
+			if (inputChannel != null)
+				inputChannel.close();
+			for (int i = 0; i < outputChannels.length; i++)
+				if (outputChannels[i] != null)
+					outputChannels[i].close();
+		}
+	}
+
 	/** Print the usage **/
 	private static void printUsage() {
 		System.out.println("meldfs stripe -pR -d# -c# -b# input output output output ...");
