@@ -29,6 +29,7 @@ public class FileStriper {
 		int ringBufferSize = 32;
 		String inputArg = null;
 		ArrayList<String> outputArgs = new ArrayList<String>();
+		boolean showPerformanceIndicators = false;
 		try {
 			for (int i = 0; i < args.length; i++) {
 				String arg = args[i];
@@ -43,6 +44,8 @@ public class FileStriper {
 						blockSize = parseIntArg("-b", arg.substring(2));
 					else if (arg.startsWith("-r"))
 						ringBufferSize = parseIntArg("-r", arg.substring(2));
+					else if (arg.equals("--show-performance"))
+						showPerformanceIndicators = true;
 					else
 						throw new IllegalArgumentException("Unknown switch: " + arg);
 				}
@@ -106,17 +109,18 @@ public class FileStriper {
 		}
 		
 		// Create our striper and begin the actual striping
-		// TODO: make timing display, below, optional and arg-controlled
 		long start = System.nanoTime();
 		ChannelStriper striper = new ChannelStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
 		striper.stripe(inputChannel, outputChannels);
 		long end = System.nanoTime();
-		System.out.println("Wall Clock: " + format(end - start));
-		System.out.println("      Read: " + format(striper.readTime));
-		System.out.println("     Write: " + format(striper.totalWriteTime));
-		for (int c = 0; c < outputChannels.length; c++)
-			System.out.println("  Write[" + c + "]: " + format(striper.writeTime[c]));
-		System.out.println("      Calc: " + format(striper.calcTime.longValue()));
+		if (showPerformanceIndicators) {
+			System.out.println("Wall Clock: " + format(end - start));
+			System.out.println("      Read: " + format(striper.readTime));
+			System.out.println("     Write: " + format(striper.totalWriteTime));
+			for (int c = 0; c < outputChannels.length; c++)
+				System.out.println("  Write[" + c + "]: " + format(striper.writeTime[c]));
+			System.out.println("      Calc: " + format(striper.calcTime.longValue()));
+		}
 	}
 	
 	/** Print the usage **/
@@ -141,6 +145,8 @@ public class FileStriper {
 		System.out.println("     ---------------------------------------------------");
 		System.out.println("     extra stripe options");
 		System.out.println("     -r#   stripe ring buffer size");
+		System.out.println("     --show-performance");
+		System.out.println("           display performance indicators after completion");
 	}
 	
 	private static int parseIntArg(String argswitch, String argval) {
