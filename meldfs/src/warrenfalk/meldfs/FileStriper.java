@@ -46,11 +46,13 @@ public class FileStriper {
 	}
 	
 	public static void main(String[] args) throws IOException, InterruptedException {
+		// No args? Print usage
 		if (args.length == 0) {
 			printUsage();
 			System.exit(1);
 		}
 		
+		// Set some defaults and parse arguments
 		String action = null;
 		String protocol = "R";
 		int dataSize = -1;
@@ -111,19 +113,19 @@ public class FileStriper {
 			System.exit(2);
 		}
 		
+		// Open the input file and output files
 		FileSystem fs = FileSystems.getDefault();
 		Path inputPath = fs.getPath(inputArg);
 		Path[] outputPaths = new Path[outputArgs.size()];
 		for (int i = 0; i < outputArgs.size(); i++)
 			outputPaths[i] = fs.getPath(outputArgs.get(i));
-		
 		FileChannel inputChannel = FileChannel.open(inputPath, StandardOpenOption.READ);
 		FileChannel[] outputChannels = new FileChannel[outputPaths.length];
 		for (int i = 0; i < outputChannels.length; i++)
 			outputChannels[i] = FileChannel.open(outputPaths[i], StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		
+		// Create a stripe coder, based on given protocol
 		StripeCoder stripeCoder = null;
-
 		if ("R".equals(protocol)) {
 			ReedSolomonCodingDomain domain = new ReedSolomonCodingDomain(dataSize, checksumSize);
 			final Coder coder = domain.getChecksumCoder();
@@ -135,6 +137,8 @@ public class FileStriper {
 			};
 		}
 		
+		// Create our striper and begin the actual striping
+		// TODO: make timing display, below, optional and arg-controlled
 		long start = System.nanoTime();
 		FileStriper striper = new FileStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
 		striper.stripe(inputChannel, outputChannels);
@@ -147,11 +151,13 @@ public class FileStriper {
 		System.out.println("      Calc: " + format(striper.calcTime.longValue()));
 	}
 	
+	/** Format nanoseconds into seconds for printing **/
 	private static String format(long nanoTime) {
 		double seconds = (double)nanoTime / (double)1000000000.0;
 		return "" + (Math.floor(seconds * 100.0) / 100.0);
 	}
 
+	/** Parse an integer argument from the command line **/
 	private static int parseIntArg(String argswitch, String argval) {
 		int radix = 10;
 		if (argval.startsWith("0x")) {
@@ -168,6 +174,7 @@ public class FileStriper {
 		return value;
 	}
 
+	/** Print the usage **/
 	private static void printUsage() {
 		System.out.println("meldfs stripe -pR -d# -c# -b# input output output output ...");
 		System.out.println();
@@ -191,6 +198,7 @@ public class FileStriper {
 		System.out.println("     -r#   stripe ring buffer size");
 	}
 	
+	/** Retains the current status of the striping operation **/
 	private static class StripeStatus {
 		Throwable readException;
 		Throwable[] writeExceptions;
@@ -204,7 +212,8 @@ public class FileStriper {
 			canceled = true;
 		}
 	}
-	
+
+	/** A stripe frame is passed to multiple threads for read/calc/write operations **/
 	static class StripeFrame {
 		final StripeMatrix matrix;
 		final AtomicInteger columnLock;
@@ -225,6 +234,7 @@ public class FileStriper {
 		}
 	}
 	
+	/** Simple fixed-length queue for stripe frames **/
 	static class StripeFrameFifo {
 		final StripeFrame[] buffer;
 		final Semaphore takeReady;
@@ -260,6 +270,7 @@ public class FileStriper {
 		}
 	}
 
+	/** Stripe all data from input, putting result in outputs **/
 	public void stripe(final ScatteringByteChannel input, final GatheringByteChannel[] outputs) throws IOException, InterruptedException {
 		// verify there is one output per source
 		if (outputs.length != dataSources + checksumSources)
