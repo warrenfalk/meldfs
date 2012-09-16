@@ -16,7 +16,7 @@ public class TestFileStriper {
 	public void testMultiByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(2);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -25,7 +25,7 @@ public class TestFileStriper {
 	public void testSingleBlockSource() throws IOException, InterruptedException {
 		byte[] source = createSource(512);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}	
@@ -34,7 +34,7 @@ public class TestFileStriper {
 	public void testSingleBlockSingleByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(513);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}	
@@ -43,7 +43,7 @@ public class TestFileStriper {
 	public void testMultiStripeMultiByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(10 * 512 + 5);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}	
@@ -52,7 +52,7 @@ public class TestFileStriper {
 	public void testMultiStripeSingleBlockSource() throws IOException, InterruptedException {
 		byte[] source = createSource(11 * 512);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -61,7 +61,7 @@ public class TestFileStriper {
 	public void testMultiStripeSingleBlockSingleByteSource() throws IOException, InterruptedException {
 		byte[] source = createSource(11 * 512 + 5);
 		StripeTest stripeTest = new StripeTest(source, 512, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -71,7 +71,7 @@ public class TestFileStriper {
 		int blockSize = 3;
 		byte[] source = createSource(11 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -81,7 +81,7 @@ public class TestFileStriper {
 		int blockSize = 4096;
 		byte[] source = createSource(11 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -91,7 +91,7 @@ public class TestFileStriper {
 		int blockSize = 16;
 		byte[] source = createSource(24 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 20, 3);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -101,7 +101,7 @@ public class TestFileStriper {
 		int blockSize = 16;
 		byte[] source = createSource(4 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 2, 1);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -111,7 +111,7 @@ public class TestFileStriper {
 		int blockSize = 16;
 		byte[] source = createSource(700 * blockSize + 5);
 		StripeTest stripeTest = new StripeTest(source, blockSize, 5, 2);
-		FileStriper striper = stripeTest.createStriper();
+		ChannelStriper striper = stripeTest.createStriper();
 		striper.stripe(stripeTest.input, stripeTest.outputs);
 		stripeTest.verify();
 	}
@@ -248,8 +248,8 @@ public class TestFileStriper {
 			return excessStripeSize + (minBlockPerColumn * blockSize);
 		}
 
-		public FileStriper createStriper() {
-			return new FileStriper(coder, blockSize, dataCount, checksumCount, 2);			
+		public ChannelStriper createStriper() {
+			return new ChannelStriper(coder, blockSize, dataCount, checksumCount, 2);			
 		}
 		
 		void verifyWriteByte(int column, long position, byte b) {

@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain;
 import warrenfalk.reedsolomon.ReedSolomonCodingDomain.Coder;
 
-public class FileStriper {
+public class ChannelStriper {
 	final int blockSize;
 	final int dataSources;
 	final int checksumSources;
@@ -34,7 +34,7 @@ public class FileStriper {
 	
 	final static ExecutorService threadPool = Executors.newCachedThreadPool();
 
-	public FileStriper(StripeCoder stripeCoder, int blockSize, int dataSources, int checksumSources, int ringBufferSize) {
+	public ChannelStriper(StripeCoder stripeCoder, int blockSize, int dataSources, int checksumSources, int ringBufferSize) {
 		this.blockSize = blockSize;
 		this.dataSources = dataSources;
 		this.checksumSources = checksumSources;
@@ -140,7 +140,7 @@ public class FileStriper {
 		// Create our striper and begin the actual striping
 		// TODO: make timing display, below, optional and arg-controlled
 		long start = System.nanoTime();
-		FileStriper striper = new FileStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
+		ChannelStriper striper = new ChannelStriper(stripeCoder, blockSize, dataSize, checksumSize, ringBufferSize);
 		striper.stripe(inputChannel, outputChannels);
 		long end = System.nanoTime();
 		System.out.println("Wall Clock: " + format(end - start));
