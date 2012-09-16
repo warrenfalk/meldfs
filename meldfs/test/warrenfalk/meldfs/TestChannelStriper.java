@@ -10,7 +10,7 @@ import java.nio.channels.ScatteringByteChannel;
 
 import org.junit.Test;
 
-public class TestFileStriper {
+public class TestChannelStriper {
 
 	@Test
 	public void testMultiByteSource() throws IOException, InterruptedException {
