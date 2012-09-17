@@ -2,12 +2,12 @@
 <launchConfiguration type="org.eclipse.jdt.launching.localJavaApplication">
 <stringAttribute key="bad_container_name" value="/meldfs/lu"/>
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
-<listEntry value="/meldfs/src/warrenfalk/meldfs/MeldFs.java"/>
+<listEntry value="/meldfs/src/warrenfalk/meldfs/MeldFsFuseAdapter.java"/>
 </listAttribute>
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
 <listEntry value="1"/>
 </listAttribute>
-<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="warrenfalk.meldfs.MeldFs"/>
-<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="/dev/shm/test -o allow_other,meld_debug,meld_paths=/home/warren/test/0:/home/warren/test/1:/home/warren/test/2:/home/warren/test/3:/home/warren/test/4:/home/warren/test/5"/>
+<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="warrenfalk.meldfs.MeldFsFuseAdapter"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="/dev/shm/test -o allow_other,meld_debug"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="meldfs"/>
 </launchConfiguration>

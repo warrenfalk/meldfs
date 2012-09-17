@@ -27,9 +27,8 @@ import warrenfalk.fuselaj.FuselajFs;
 import warrenfalk.fuselaj.Stat;
 
 public class MeldFsFuseAdapter extends FuselajFs {
-	SourceFs[] sources;
+	MeldFs meldfs;
 	String[] fuseArgs;
-	ExecutorService threadPool;
 
 	final Path rootPath = nfs.getPath(".").normalize();
 	
@@ -38,10 +37,11 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	 * @param sources
 	 * @param debug
 	 * @param options
+	 * @throws IOException 
 	 */
-	public MeldFsFuseAdapter(Path mountLoc, Path[] sources, boolean debug, String options) {
+	public MeldFsFuseAdapter(Path mountLoc, boolean debug, String options) throws IOException {
 		super(true);
-		this.sources = SourceFs.fromPaths(sources);
+		meldfs = new MeldFs();
 		ArrayList<String> arglist = new ArrayList<String>();
 		if (debug)
 			arglist.add("-d");
@@ -51,7 +51,6 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			arglist.add(options);
 		}
 		fuseArgs = arglist.toArray(new String[arglist.size()]);
-		threadPool = Executors.newCachedThreadPool();
 	}
 	
 	/** Find the parent path of the given path.
@@ -86,7 +85,6 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			// fuseOptions.add("use_ino"); <- not in the meldfs model because there is no persistently consistent inode 
 			// fuseOptions.add("allow_other"); <- allowed, but should be user-specified
 			
-			ArrayList<Path> pathList = new ArrayList<>();
 			Path mountPoint = null;
 			for (int i = 0; i < args.length; i++) {
 				String arg = args[i];
@@ -109,10 +107,8 @@ public class MeldFsFuseAdapter extends FuselajFs {
 								if ("meld_debug".equals(name)) {
 									debug = !"false".equals(value);
 								}
-								else if ("meld_paths".equals(name)) {
-									String[] paths = value.split(":");
-									for (String path : paths)
-										pathList.add(FileSystems.getDefault().getPath(path));
+								else {
+									throw new RuntimeException("Unknown meld option: " + option);
 								}
 							}
 							else {
@@ -136,13 +132,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 				throw new RuntimeException("No mount point specified");
 			}
 			
-			Path[] paths = pathList.toArray(new Path[pathList.size()]);
-			if (paths.length == 0) {
-				System.err.println("No source paths specified; use meld_paths=path1:path2:path3 mount option");
-				System.exit(1);
-			}
-			
-			MeldFsFuseAdapter mfs = new MeldFsFuseAdapter(mountPoint, paths, debug, join(",", fuseOptions));
+			MeldFsFuseAdapter mfs = new MeldFsFuseAdapter(mountPoint, debug, join(",", fuseOptions));
 			int exitCode = mfs.run();
 			System.exit(exitCode);
 		}
@@ -167,7 +157,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	@Override
 	protected void getattr(Path path, Stat stat) throws FilesystemException {
 		// attempt to find entry with that name
-		Path file = getLatestFile(path);
+		Path file = meldfs.getRealPath(path);
 		if (file == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_lstat(file, stat);
@@ -177,11 +167,11 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	protected void mkdir(Path path, int mode) throws FilesystemException {
 		// find which device contains the parent directory and create there
 		// if more than one device contains the parent, create on the device with the most recently modified
-		Path dir = getLatestFile(path);
+		Path dir = meldfs.getRealPath(path);
 		if (dir != null)
 			throw new FilesystemException(Errno.FileExists);
 		Path parent = parentOf(path);
-		Path parentDir = getLatestFile(parent);
+		Path parentDir = meldfs.getRealPath(parent);
 		if (parentDir == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		dir = parentDir.resolve(path.getFileName());
@@ -192,7 +182,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	protected void rmdir(final Path path) throws FilesystemException {
 		final AtomicInteger found = new AtomicInteger(0);
 		final AtomicInteger deleted = new AtomicInteger(0);
-		runMultiSourceOperation(new SourceOp() {
+		meldfs.runMultiSourceOperation(new SourceOp() {
 			@Override
 			public void run(int index, SourceFs source) {
 				Path sourceLoc = source.root.resolve(path);
@@ -218,44 +208,10 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void opendir(Path path, FileInfo fi) throws FilesystemException {
-		Path dir = getLatestFile(path);
+		Path dir = meldfs.getRealPath(path);
 		if (!Files.isDirectory(dir))
 			throw new FilesystemException(Errno.NotADirectory);
 		FileHandle.open(fi, path);
-	}
-	
-	/** Runs a source operation against all selected sources concurrently, returning only when all are complete.
-	 * A source is selected if the element at its position within the mask argument is not null
-	 * @param mask
-	 * @param operation
-	 * @throws FilesystemException
-	 */
-	void runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
-		final AtomicInteger sync = new AtomicInteger(sources.length);
-		try {
-			synchronized (sync) {
-				for (int i = 0; i < sources.length; i++) {
-					if (null == mask || mask[i] != null)
-						threadPool.execute(new SourceOpRunner(operation, i, sources[i], sync));
-					else
-						sync.decrementAndGet();
-				}
-				if (sync.intValue() > 0)
-					sync.wait();
-			}
-		}
-		catch (InterruptedException e) {
-			throw new FilesystemException(e);
-		}
-	}
-	
-	/** Runs a source operation against all sources concurrently, returning only when all are complete
-	 * @param mask
-	 * @param operation
-	 * @throws FilesystemException
-	 */
-	void runMultiSourceOperation(SourceOp operation) throws FilesystemException {
-		runMultiSourceOperation(null, operation);
 	}
 	
 	@Override
@@ -266,7 +222,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			final Path dirpath = (Path)fh.data;
 			final HashSet<String> items = new HashSet<String>();
 			
-			runMultiSourceOperation(new SourceOp() {
+			meldfs.runMultiSourceOperation(new SourceOp() {
 				public void run(int index, SourceFs source) {
 					try {
 						Path p = source.root.resolve(dirpath);
@@ -311,7 +267,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected Path readlink(Path path) throws FilesystemException {
-		Path realPath = getLatestFile(path);
+		Path realPath = meldfs.getRealPath(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		return os_readlink(realPath);
@@ -319,7 +275,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void symlink(Path targetOfLink, Path pathOfLink) throws FilesystemException {
-		Path realPath = getLatestFile(parentOf(pathOfLink));
+		Path realPath = meldfs.getRealPath(parentOf(pathOfLink));
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_symlink(targetOfLink, realPath.resolve(pathOfLink.getFileName()));
@@ -328,28 +284,14 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	@Override
 	protected void link(final Path from, Path to) throws FilesystemException {
 		// get the current "from" file
-		final Path[] files = new Path[sources.length];
-		final long[] modTimes = new long[sources.length];
-		runMultiSourceOperation(new SourceOp() {
-			@Override
-			public void run(int index, SourceFs source) {
-				Path sourceLoc = source.root.resolve(from);
-				if (Files.exists(sourceLoc, LinkOption.NOFOLLOW_LINKS)) {
-					try {
-						modTimes[index] = Files.getLastModifiedTime(sourceLoc, LinkOption.NOFOLLOW_LINKS).toMillis();
-						files[index] = sourceLoc;
-					}
-					catch (IOException ioe) {
-						source.onIoException(ioe);
-					}
-				}
-			}
-		});
-		int index = freshest(files, modTimes);
+		final Path[] files = new Path[meldfs.getSourceCount()];
+		final long[] modTimes = new long[meldfs.getSourceCount()];
+		meldfs.getAllRealPaths(from, files, modTimes);
+		int index = MeldFs.freshest(files, modTimes);
 		if (index == -1)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		Path realFrom = files[index];
-		SourceFs fromSource = sources[index];
+		SourceFs fromSource = meldfs.getSource(index);
 		Path realTo = fromSource.root.resolve(to);
 		Path realToParent = parentOf(realTo);
 		// Sorry, can't figure out a way to do that consistently, the directory currently has to already exist on the same source fs
@@ -365,7 +307,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		// let's see if this is a simple rename
 		if (fromParent.equals(toParent)) {
 			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
-			runMultiSourceOperation(new SourceOp() {
+			meldfs.runMultiSourceOperation(new SourceOp() {
 				public void run(int index, SourceFs source) {
 					Path sourceLoc = source.root.resolve(from);
 					Path targetLoc = source.root.resolve(to);
@@ -389,8 +331,8 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			// so first we find if the from and target actually exist somewhere
 			final AtomicInteger targetCount = new AtomicInteger(0);
 			final AtomicInteger fromCount = new AtomicInteger(0);
-			final Path[] files = new Path[sources.length];
-			runMultiSourceOperation(new SourceOp() {
+			final Path[] files = new Path[meldfs.getSourceCount()];
+			meldfs.runMultiSourceOperation(new SourceOp() {
 				public void run(int index, SourceFs source) {
 					Path sourceLoc = source.root.resolve(from);
 					if (Files.exists(sourceLoc)) {
@@ -408,7 +350,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			// since the from and target exist somewhere, go ahead and rename all froms to the targets
 			// note that we may have to create the target directory structure in some cases
 			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
-			runMultiSourceOperation(files, new SourceOp() {
+			meldfs.runMultiSourceOperation(files, new SourceOp() {
 				public void run(int index, SourceFs source) {
 					Path realFrom = files[index];
 					Path realTo = source.root.resolve(to);
@@ -428,45 +370,9 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		}
 	}
 	
-	/**
-	 * Returns the index of the freshest file.
-	 * I.e. return x for the greatest modTimes[x] for which files[x] is not null, or -1 if all files are null.
-	 * Lower values of x are favored in ties.
-	 * @param files
-	 * @param modTimes
-	 * @return
-	 */
-	private int freshest(Path[] files, long[] modTimes) {
-		int result = -1;
-		long max = Long.MIN_VALUE;
-		for (int i = 0; i < files.length; i++) {
-			if (files[i] == null)
-				continue;
-			long mod = modTimes[i];
-			if (mod > max) {
-				result = i;
-				max = mod;
-			}
-		}
-		return result;
-	}
-	
-	/**
-	 * Returns the real path of the freshest version of the file across all sources
-	 * @param files
-	 * @param modTimes
-	 * @return
-	 */
-	private Path freshestFile(Path[] files, long[] modTimes) {
-		int i = freshest(files, modTimes);
-		if (i == -1)
-			return null;
-		return files[i];
-	}
-	
 	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
-		Path realPath = getLatestFile(path);
+		Path realPath = meldfs.getRealPath(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		try {
@@ -484,10 +390,10 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		// if it exists, and if this is a create_new, then fail, otherwise overwrite that one
 		// if it doesn't exist, get the youngest parent and create one there
 		final Path parent = parentOf(path);
-		final Path[] files = new Path[sources.length];
-		final Path[] parents = new Path[sources.length];
-		final long[] modTimes = new long[sources.length];
-		runMultiSourceOperation(new SourceOp() {
+		final Path[] files = new Path[meldfs.getSourceCount()];
+		final Path[] parents = new Path[meldfs.getSourceCount()];
+		final long[] modTimes = new long[meldfs.getSourceCount()];
+		meldfs.runMultiSourceOperation(new SourceOp() {
 			public void run(int index, SourceFs source) {
 				Path sourceLoc = source.root.resolve(path);
 				if (Files.exists(sourceLoc)) {
@@ -513,14 +419,14 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		});
 
 		// find the youngest existing file (if any), first
-		Path realPath = freshestFile(files, modTimes);
+		Path realPath = MeldFs.freshestFile(files, modTimes);
 		if (realPath != null) {
 			if (0 != (fi.getOpenFlags() & FileInfo.O_EXCL))
 				throw new FilesystemException(Errno.FileExists);
 		}
 		else {
 			// no existing file, find the youngest parent
-			Path openDir = freshestFile(parents, modTimes);
+			Path openDir = MeldFs.freshestFile(parents, modTimes);
 			if (openDir == null)
 				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 			realPath = openDir.resolve(path.getFileName());
@@ -618,7 +524,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	protected void unlink(final Path path) throws FilesystemException {
 		final AtomicInteger deleted = new AtomicInteger(0);
 		final AtomicInteger found = new AtomicInteger(0);
-		runMultiSourceOperation(new SourceOp() {
+		meldfs.runMultiSourceOperation(new SourceOp() {
 			@Override
 			public void run(int index, SourceFs source) {
 				Path sourceLoc = source.root.resolve(path);
@@ -648,7 +554,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void truncate(Path path, long size) throws FilesystemException {
-		Path realPath = getLatestFile(path);
+		Path realPath = meldfs.getRealPath(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_truncate(realPath, size);
@@ -656,7 +562,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void chown(Path path, int uid, int gid) throws FilesystemException {
-		Path realPath = getLatestFile(path);
+		Path realPath = meldfs.getRealPath(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_chown(realPath, uid, gid);
@@ -664,7 +570,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void chmod(Path path, int mode) throws FilesystemException {
-		Path realPath = getLatestFile(path);
+		Path realPath = meldfs.getRealPath(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_chmod(realPath, mode);
@@ -672,38 +578,10 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void utimens(Path path, long accessSeconds, long accessNanoseconds, long modSeconds, long modNanoseconds) throws FilesystemException {
-		Path realPath = getLatestFile(path);
+		Path realPath = meldfs.getRealPath(path);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_utimensat(realPath, accessSeconds, accessNanoseconds, modSeconds, modNanoseconds);
-	}
-	
-	/** Return the real path the the file if on one device, or the path to the most recently
-	 * modified version of the file if on multiple devices
-	 * @param path
-	 * @return
-	 * @throws InterruptedException
-	 * @throws FilesystemException 
-	 */
-	private Path getLatestFile(final Path path) throws FilesystemException {
-		final Path[] files = new Path[sources.length];
-		final long[] modTimes = new long[sources.length];
-		runMultiSourceOperation(new SourceOp() {
-			@Override
-			public void run(int index, SourceFs source) {
-				Path sourceLoc = source.root.resolve(path);
-				if (Files.exists(sourceLoc, LinkOption.NOFOLLOW_LINKS)) {
-					try {
-						modTimes[index] = Files.getLastModifiedTime(sourceLoc, LinkOption.NOFOLLOW_LINKS).toMillis();
-						files[index] = sourceLoc;
-					}
-					catch (IOException ioe) {
-						source.onIoException(ioe);
-					}
-				}
-			}
-		});
-		return freshestFile(files, modTimes);
 	}
 	
 }
