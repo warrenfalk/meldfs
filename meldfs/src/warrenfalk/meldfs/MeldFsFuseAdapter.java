@@ -528,7 +528,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			@Override
 			public void run(int index, SourceFs source) {
 				Path sourceLoc = source.root.resolve(path);
-				if (Files.exists(sourceLoc)) {
+				if (Files.exists(sourceLoc, LinkOption.NOFOLLOW_LINKS)) {
 					found.incrementAndGet();
 					try {
 						Files.delete(sourceLoc);
