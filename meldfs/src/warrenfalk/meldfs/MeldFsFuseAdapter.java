@@ -26,7 +26,7 @@ import warrenfalk.fuselaj.FilesystemException;
 import warrenfalk.fuselaj.FuselajFs;
 import warrenfalk.fuselaj.Stat;
 
-public class MeldFs extends FuselajFs {
+public class MeldFsFuseAdapter extends FuselajFs {
 	SourceFs[] sources;
 	String[] fuseArgs;
 	ExecutorService threadPool;
@@ -39,7 +39,7 @@ public class MeldFs extends FuselajFs {
 	 * @param debug
 	 * @param options
 	 */
-	public MeldFs(Path mountLoc, Path[] sources, boolean debug, String options) {
+	public MeldFsFuseAdapter(Path mountLoc, Path[] sources, boolean debug, String options) {
 		super(true);
 		this.sources = SourceFs.fromPaths(sources);
 		ArrayList<String> arglist = new ArrayList<String>();
@@ -142,7 +142,7 @@ public class MeldFs extends FuselajFs {
 				System.exit(1);
 			}
 			
-			MeldFs mfs = new MeldFs(mountPoint, paths, debug, join(",", fuseOptions));
+			MeldFsFuseAdapter mfs = new MeldFsFuseAdapter(mountPoint, paths, debug, join(",", fuseOptions));
 			int exitCode = mfs.run();
 			System.exit(exitCode);
 		}
