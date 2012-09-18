@@ -371,13 +371,13 @@ public class MeldFs {
 	}
 
 	/** Returns a set containing all of the children of directory, <code>dirpath</code> */
-	public Set<String> ls(final Path dirpath) throws FilesystemException {
+	public Set<String> ls(final Path vdirpath) throws FilesystemException {
 		final HashSet<String> items = new HashSet<String>();
 		
 		runMultiSourceOperation(new SourceOp() {
 			public void run(int index, SourceFs source) {
 				try {
-					Path p = source.root.resolve(dirpath);
+					Path p = source.root.resolve(vdirpath);
 					if (Files.isDirectory(p)) {
 						try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
 							synchronized (items) {
