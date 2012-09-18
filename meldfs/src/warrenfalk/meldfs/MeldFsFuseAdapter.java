@@ -174,12 +174,12 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		Path dir = meldfs.getRealPath(path);
 		if (!Files.isDirectory(dir))
 			throw new FilesystemException(Errno.NotADirectory);
-		FileHandle.open(fi, path);
+		FuseFileHandle.open(fi, path);
 	}
 	
 	@Override
 	protected void readdir(Path path, DirBuffer dirBuffer, FileInfo fileInfo) throws FilesystemException {
-		FileHandle fh = FileHandle.get(fileInfo.getFileHandle());
+		FuseFileHandle fh = FuseFileHandle.get(fileInfo.getFileHandle());
 		String[] names;
 		if (fh.data instanceof Path) {
 			Set<String> items = meldfs.ls((Path)fh.data);
@@ -198,7 +198,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void releasedir(Path path, FileInfo fi) throws FilesystemException {
-		FileHandle.release(fi);
+		FuseFileHandle.release(fi);
 	}
 	
 	@Override
@@ -248,7 +248,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		try {
 			FileChannel channel = FileChannel.open(realPath, getJavaOpenOpts(fileInfo.getOpenFlags()));
-			FileHandle.open(fileInfo, channel);
+			FuseFileHandle.open(fileInfo, channel);
 		}
 		catch (IOException ioe) {
 			throw new FilesystemException(ioe);
@@ -259,7 +259,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	protected void create(final Path path, int mode, FileInfo fi) throws FilesystemException {
 		boolean failIfExists = 0 != (fi.getOpenFlags() & FileInfo.O_EXCL);
 		FileChannel channel = meldfs.create(path, failIfExists, getJavaOpenOpts(fi.getOpenFlags()));
-		FileHandle.open(fi, channel);
+		FuseFileHandle.open(fi, channel);
 	}
 
 	/**
@@ -296,7 +296,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void read(Path path, FileInfo fileInfo, ByteBuffer buffer, long position) throws FilesystemException {
-		FileHandle fh = FileHandle.get(fileInfo.getFileHandle());
+		FuseFileHandle fh = FuseFileHandle.get(fileInfo.getFileHandle());
 		FileChannel channel = (FileChannel)fh.data;
 		try {
 			channel.read(buffer, position);
@@ -308,7 +308,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void write(Path path, FileInfo fi, ByteBuffer bb, long offset) throws FilesystemException {
-		FileHandle fh = FileHandle.get(fi.getFileHandle());
+		FuseFileHandle fh = FuseFileHandle.get(fi.getFileHandle());
 		FileChannel channel = (FileChannel)fh.data;
 		try {
 			channel.write(bb, offset);
@@ -320,7 +320,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void ftruncate(Path path, long size, FileInfo fi) throws FilesystemException {
-		FileHandle fh = FileHandle.get(fi.getFileHandle());
+		FuseFileHandle fh = FuseFileHandle.get(fi.getFileHandle());
 		FileChannel channel = (FileChannel)fh.data;
 		try {
 			channel.truncate(size);
@@ -332,7 +332,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 
 	@Override
 	protected void fsync(Path path, boolean isdatasync, FileInfo fi) throws FilesystemException {
-		FileHandle fh = FileHandle.get(fi.getFileHandle());
+		FuseFileHandle fh = FuseFileHandle.get(fi.getFileHandle());
 		FileChannel channel = (FileChannel)fh.data;
 		try {
 			channel.force(!isdatasync);
@@ -349,7 +349,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void release(Path path, FileInfo fi) throws FilesystemException {
-		FileHandle.release(fi);
+		FuseFileHandle.release(fi);
 	}
 	
 	@Override

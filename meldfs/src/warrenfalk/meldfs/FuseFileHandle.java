@@ -5,20 +5,20 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import warrenfalk.fuselaj.FileInfo;
 
-public class FileHandle {
+public class FuseFileHandle {
 	final long number;
 	Object data;
 	
 	private static AtomicLong nextHandle = new AtomicLong();
-	private static HashMap<Long,FileHandle> map = new HashMap<Long,FileHandle>();
+	private static HashMap<Long,FuseFileHandle> map = new HashMap<Long,FuseFileHandle>();
 	
-	private FileHandle(Object data) {
+	private FuseFileHandle(Object data) {
 		this.number = nextHandle.incrementAndGet();
 		this.data = data;
 	}
 	
-	public static FileHandle open(FileInfo fi, Object data) {
-		FileHandle handle = new FileHandle(data);
+	public static FuseFileHandle open(FileInfo fi, Object data) {
+		FuseFileHandle handle = new FuseFileHandle(data);
 		fi.putFileHandle(handle.number);
 		synchronized (map) {
 			map.put(handle.number, handle);
@@ -26,15 +26,15 @@ public class FileHandle {
 		return handle;
 	}
 	
-	public static FileHandle release(FileInfo fi) {
-		FileHandle handle;
+	public static FuseFileHandle release(FileInfo fi) {
+		FuseFileHandle handle;
 		synchronized (map) {
 			handle = map.remove(fi.getFileHandle());
 		}
 		return handle;
 	}
 	
-	public static FileHandle get(long number) {
+	public static FuseFileHandle get(long number) {
 		synchronized (map) {
 			return map.get(number);
 		}
