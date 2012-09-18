@@ -169,30 +169,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void rmdir(final Path path) throws FilesystemException {
-		final AtomicInteger found = new AtomicInteger(0);
-		final AtomicInteger deleted = new AtomicInteger(0);
-		meldfs.runMultiSourceOperation(new SourceOp() {
-			@Override
-			public void run(int index, SourceFs source) {
-				Path sourceLoc = source.root.resolve(path);
-				if (Files.exists(sourceLoc)) {
-					found.incrementAndGet();
-					try {
-						os_rmdir(sourceLoc);
-						deleted.incrementAndGet();
-					}
-					catch (FilesystemException fs) {
-						// TODO: figure out what to do here, this should have some sort of transactional capability
-						// We've tried to remove one of the instances of the directory, but at least one failed for some reason
-					}
-				}
-			}
-		});
-		if (found.intValue() == 0)
-			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-		// TODO: we should probably return the error message from the os_rmdir that failed
-		if (found.intValue() != deleted.intValue())
-			throw new FilesystemException(Errno.IOError);
+		meldfs.rmdir(path);
 	}
 	
 	@Override

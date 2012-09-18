@@ -14,11 +14,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import warrenfalk.fuselaj.Errno;
 import warrenfalk.fuselaj.FilesystemException;
+import warrenfalk.fuselaj.FuselajFs;
 
 public class MeldFs {
 	final Path rootPath = FileSystems.getDefault().getPath(".").normalize();
 	private SourceFs[] sources;
 	private ExecutorService threadPool;
+	ThreadLocal<FilesystemException[]> _exceptions = new ThreadLocal<FilesystemException[]>();
 
 	public MeldFs() throws IOException {
 		MeldFsProperties props = new MeldFsProperties();
@@ -34,13 +36,21 @@ public class MeldFs {
 	 * @param operation
 	 * @throws FilesystemException
 	 */
-	public void runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
+	public FilesystemException[] runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
 		final AtomicInteger sync = new AtomicInteger(sources.length);
+		// get the filesystem error holder
+		FilesystemException[] fserrs = _exceptions.get();
+		if (fserrs == null || fserrs.length != sources.length)
+			_exceptions.set(fserrs = new FilesystemException[sources.length]);
+		for (int i = 0; i < fserrs.length; i++)
+			fserrs[i] = null;
+
+		// now run the operations
 		try {
 			synchronized (sync) {
 				for (int i = 0; i < sources.length; i++) {
 					if (null == mask || mask[i] != null)
-						threadPool.execute(new SourceOpRunner(operation, i, sources[i], sync));
+						threadPool.execute(new SourceOpRunner(operation, i, sources[i], sync, fserrs));
 					else
 						sync.decrementAndGet();
 				}
@@ -51,15 +61,34 @@ public class MeldFs {
 		catch (InterruptedException e) {
 			throw new FilesystemException(e);
 		}
+		
+		// check for errors
+		int errCount = 0;
+		for (int i = 0; i < fserrs.length; i++)
+			if (fserrs[i] != null)
+				errCount++;
+		
+		// fashion an error array if necessary
+		FilesystemException[] rval = null;
+		if (errCount > 0) {
+			rval = new FilesystemException[errCount];
+			int j = 0;
+			for (int i = 0; i < fserrs.length; i++)
+				if (fserrs[i] != null)
+					rval[j++] = fserrs[i]; 
+		}
+		
+		return rval;
 	}
 	
 	/** Runs a source operation against all sources concurrently, returning only when all are complete
 	 * @param mask
 	 * @param operation
+	 * @return 
 	 * @throws FilesystemException
 	 */
-	public void runMultiSourceOperation(SourceOp operation) throws FilesystemException {
-		runMultiSourceOperation(null, operation);
+	public FilesystemException[] runMultiSourceOperation(SourceOp operation) throws FilesystemException {
+		return runMultiSourceOperation(null, operation);
 	}
 	
 	/** Return the real path representing the virtual path if on one device, or the real path to the most recently
@@ -232,6 +261,40 @@ public class MeldFs {
 		// TODO: try to throw the actual error that resulted
 		if (deleted.intValue() < found.intValue())
 			throw new FilesystemException(Errno.IOError);
+	}
+
+	public void rmdir(final Path path) throws FilesystemException {
+		final AtomicInteger found = new AtomicInteger(0);
+		final AtomicInteger deleted = new AtomicInteger(0);
+		FilesystemException[] errors = runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) throws FilesystemException {
+				Path sourceLoc = source.root.resolve(path);
+				if (Files.exists(sourceLoc)) {
+					found.incrementAndGet();
+					boolean success = false;
+					try {
+						FuselajFs.os_rmdir(sourceLoc);
+						deleted.incrementAndGet();
+						success = true;
+					}
+					finally {
+						if (!success) {
+							// TODO: figure out what to do here, this should have some sort of transactional capability
+							// We've tried to remove one of the instances of the directory, but at least one failed for some reason
+						}
+					}
+				}
+			}
+		});
+		if (found.intValue() == 0)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+
+		if (found.intValue() != deleted.intValue()) {
+			if (errors.length > 0)
+				throw errors[0];
+			throw new FilesystemException(Errno.IOError);
+		}
 	}
 	
 	
