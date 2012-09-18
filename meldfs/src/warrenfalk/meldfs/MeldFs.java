@@ -2,11 +2,13 @@ package warrenfalk.meldfs;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -367,6 +369,38 @@ public class MeldFs {
 				}
 			});
 		}
+	}
+
+	/** Returns a set containing all of the children of directory, <code>dirpath</code> */
+	public Set<String> ls(final Path dirpath) throws FilesystemException {
+		final HashSet<String> items = new HashSet<String>();
+		
+		runMultiSourceOperation(new SourceOp() {
+			public void run(int index, SourceFs source) {
+				try {
+					Path p = source.root.resolve(dirpath);
+					if (Files.isDirectory(p)) {
+						try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
+							synchronized (items) {
+								items.add(".");
+								items.add("..");
+							}
+							for (Path item : stream) {
+								String itemName = item.getFileName().toString();
+								synchronized (items) {
+									items.add(itemName);
+								}
+							}
+						}
+					}
+				}
+				catch (IOException ioe) {
+					source.onIoException(ioe);
+				}
+			}
+		});
+		
+		return items;
 	}
 	
 	
