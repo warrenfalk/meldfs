@@ -401,6 +401,21 @@ public class MeldFs {
 		
 		return items;
 	}
+
+	/** Makes a directory */
+	public void mkdir(Path vpath, int mode) throws FilesystemException {
+		// find which device contains the parent directory and create there
+		// if more than one device contains the parent, create on the device with the most recently modified
+		Path dir = getRealPath(vpath);
+		if (dir != null)
+			throw new FilesystemException(Errno.FileExists);
+		Path parent = parentOf(vpath);
+		Path parentDir = getRealPath(parent);
+		if (parentDir == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		dir = parentDir.resolve(vpath.getFileName());
+		FuselajFs.os_mkdir(dir, mode);
+	}
 	
 	
 }

@@ -151,17 +151,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void mkdir(Path path, int mode) throws FilesystemException {
-		// find which device contains the parent directory and create there
-		// if more than one device contains the parent, create on the device with the most recently modified
-		Path dir = meldfs.getRealPath(path);
-		if (dir != null)
-			throw new FilesystemException(Errno.FileExists);
-		Path parent = meldfs.parentOf(path);
-		Path parentDir = meldfs.getRealPath(parent);
-		if (parentDir == null)
-			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-		dir = parentDir.resolve(path.getFileName());
-		os_mkdir(dir, mode);
+		meldfs.mkdir(path, mode);
 	}
 	
 	@Override
