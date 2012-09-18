@@ -416,6 +416,37 @@ public class MeldFs {
 		dir = parentDir.resolve(vpath.getFileName());
 		FuselajFs.os_mkdir(dir, mode);
 	}
+
+	/** Attempt to create a hard link */
+	public void link(Path from, Path to) throws FilesystemException {
+		// get the current "from" file
+		final Path[] files = new Path[sources.length];
+		final long[] modTimes = new long[sources.length];
+		getAllRealPaths(from, files, modTimes);
+		int index = MeldFs.freshest(files, modTimes);
+		if (index == -1)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		Path realFrom = files[index];
+		SourceFs fromSource = sources[index];
+		Path realTo = fromSource.root.resolve(to);
+		Path realToParent = parentOf(realTo);
+		// Sorry, can't figure out a way to do that consistently, the directory currently has to already exist on the same source fs
+		if (!Files.isDirectory(realToParent))
+			throw new FilesystemException(Errno.CrossDeviceLink);
+		FuselajFs.os_link(realFrom, realTo);
+	}
+
+	public FileChannel open(Path path, Set<? extends OpenOption> openOptions) throws FilesystemException {
+		Path realPath = getRealPath(path);
+		if (realPath == null)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		try {
+			return FileChannel.open(realPath, openOptions);
+		}
+		catch (IOException ioe) {
+			throw new FilesystemException(ioe);
+		}
+	}
 	
 	
 }

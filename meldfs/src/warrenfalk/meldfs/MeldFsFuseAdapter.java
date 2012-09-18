@@ -209,21 +209,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void link(final Path from, Path to) throws FilesystemException {
-		// get the current "from" file
-		final Path[] files = new Path[meldfs.getSourceCount()];
-		final long[] modTimes = new long[meldfs.getSourceCount()];
-		meldfs.getAllRealPaths(from, files, modTimes);
-		int index = MeldFs.freshest(files, modTimes);
-		if (index == -1)
-			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-		Path realFrom = files[index];
-		SourceFs fromSource = meldfs.getSource(index);
-		Path realTo = fromSource.root.resolve(to);
-		Path realToParent = meldfs.parentOf(realTo);
-		// Sorry, can't figure out a way to do that consistently, the directory currently has to already exist on the same source fs
-		if (!Files.isDirectory(realToParent))
-			throw new FilesystemException(Errno.CrossDeviceLink);
-		os_link(realFrom, realTo);
+		meldfs.link(from, to);
 	}
 	
 	@Override
@@ -233,16 +219,8 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void open(Path path, FileInfo fileInfo) throws FilesystemException {
-		Path realPath = meldfs.getRealPath(path);
-		if (realPath == null)
-			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-		try {
-			FileChannel channel = FileChannel.open(realPath, getJavaOpenOpts(fileInfo.getOpenFlags()));
-			FuseFileHandle.open(fileInfo, channel);
-		}
-		catch (IOException ioe) {
-			throw new FilesystemException(ioe);
-		}
+		FileChannel channel = meldfs.open(path, getJavaOpenOpts(fileInfo.getOpenFlags()));
+		FuseFileHandle.open(fileInfo, channel);
 	}
 	
 	@Override
