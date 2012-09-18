@@ -31,14 +31,13 @@ public class MeldFs {
 		threadPool = Executors.newCachedThreadPool();
 	}
 
-	// TODO: consider making this a private operation
 	/** Runs a source operation against all selected sources concurrently, returning only when all are complete.
 	 * A source is selected if the element at its position within the mask argument is not null
 	 * @param mask
 	 * @param operation
 	 * @throws FilesystemException
 	 */
-	public FilesystemException[] runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
+	private FilesystemException[] runMultiSourceOperation(Object[] mask, SourceOp operation) throws FilesystemException {
 		final AtomicInteger sync = new AtomicInteger(sources.length);
 		// get the filesystem error holder
 		FilesystemException[] fserrs = _exceptions.get();
@@ -89,7 +88,7 @@ public class MeldFs {
 	 * @return 
 	 * @throws FilesystemException
 	 */
-	public FilesystemException[] runMultiSourceOperation(SourceOp operation) throws FilesystemException {
+	private FilesystemException[] runMultiSourceOperation(SourceOp operation) throws FilesystemException {
 		return runMultiSourceOperation(null, operation);
 	}
 	
