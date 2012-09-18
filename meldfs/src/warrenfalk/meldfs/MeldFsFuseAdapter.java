@@ -6,7 +6,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -15,7 +14,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import warrenfalk.fuselaj.DirBuffer;
 import warrenfalk.fuselaj.Errno;
@@ -268,72 +266,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void rename(final Path from, final Path to) throws FilesystemException {
-		final Path toParent = meldfs.parentOf(to);
-		final Path fromParent = meldfs.parentOf(from);
-		// let's see if this is a simple rename
-		if (fromParent.equals(toParent)) {
-			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
-			meldfs.runMultiSourceOperation(new SourceOp() {
-				public void run(int index, SourceFs source) {
-					Path sourceLoc = source.root.resolve(from);
-					Path targetLoc = source.root.resolve(to);
-					try {
-						if (Files.exists(sourceLoc))
-							os_rename(sourceLoc, targetLoc);
-					}
-					catch (FilesystemException fse) {
-						// TODO: handle this, see TODO above about transactions
-					}
-				}
-			});
-		}
-		else {
-			// when we have to move from directory to directory, it can become complicated
-			// because the target directory may exist somewhere while not existing on all
-			// of the sources that contain the from file.  If this happens, we need to create
-			// the target directories first.  This is complicated by the fact that we need
-			// to copy the permissions and times of the current target directories.
-			
-			// so first we find if the from and target actually exist somewhere
-			final AtomicInteger targetCount = new AtomicInteger(0);
-			final AtomicInteger fromCount = new AtomicInteger(0);
-			final Path[] files = new Path[meldfs.getSourceCount()];
-			meldfs.runMultiSourceOperation(new SourceOp() {
-				public void run(int index, SourceFs source) {
-					Path sourceLoc = source.root.resolve(from);
-					if (Files.exists(sourceLoc)) {
-						fromCount.incrementAndGet();
-						files[index] = sourceLoc;
-					}
-					sourceLoc = source.root.resolve(toParent);
-					if (Files.exists(sourceLoc))
-						targetCount.incrementAndGet();
-				}
-			});
-			if (fromCount.intValue() == 0 || targetCount.intValue() == 0)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			
-			// since the from and target exist somewhere, go ahead and rename all froms to the targets
-			// note that we may have to create the target directory structure in some cases
-			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
-			meldfs.runMultiSourceOperation(files, new SourceOp() {
-				public void run(int index, SourceFs source) {
-					Path realFrom = files[index];
-					Path realTo = source.root.resolve(to);
-					Path realTarget = meldfs.parentOf(realTo);
-					try {
-						if (!Files.exists(realTarget, LinkOption.NOFOLLOW_LINKS)) {
-							// TODO: when creating realTarget directories, copy permissions and times from current versions
-							Files.createDirectories(realTarget);
-						}
-						os_rename(realFrom, realTo);
-					}
-					catch (IOException | FilesystemException ioe) {
-						// TODO: handle this, see transaction note further up
-					}
-				}
-			});
-		}
+		meldfs.rename(from, to);
 	}
 	
 	@Override

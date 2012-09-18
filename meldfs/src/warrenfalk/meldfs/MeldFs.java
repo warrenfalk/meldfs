@@ -297,6 +297,77 @@ public class MeldFs {
 			throw new FilesystemException(Errno.IOError);
 		}
 	}
+
+	/** Attempt to rename a file from virtual path <code>from</code> to virtual path <code>to</code> 
+	 * @throws FilesystemException */
+	public void rename(final Path from, final Path to) throws FilesystemException {
+		final Path toParent = parentOf(to);
+		final Path fromParent = parentOf(from);
+		// let's see if this is a simple rename
+		if (fromParent.equals(toParent)) {
+			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
+			runMultiSourceOperation(new SourceOp() {
+				public void run(int index, SourceFs source) {
+					Path sourceLoc = source.root.resolve(from);
+					Path targetLoc = source.root.resolve(to);
+					try {
+						if (Files.exists(sourceLoc))
+							FuselajFs.os_rename(sourceLoc, targetLoc);
+					}
+					catch (FilesystemException fse) {
+						// TODO: handle this, see TODO above about transactions
+					}
+				}
+			});
+		}
+		else {
+			// when we have to move from directory to directory, it can become complicated
+			// because the target directory may exist somewhere while not existing on all
+			// of the sources that contain the from file.  If this happens, we need to create
+			// the target directories first.  This is complicated by the fact that we need
+			// to copy the permissions and times of the current target directories.
+			
+			// so first we find if the from and target actually exist somewhere
+			final AtomicInteger targetCount = new AtomicInteger(0);
+			final AtomicInteger fromCount = new AtomicInteger(0);
+			final Path[] files = new Path[sources.length];
+			runMultiSourceOperation(new SourceOp() {
+				public void run(int index, SourceFs source) {
+					Path sourceLoc = source.root.resolve(from);
+					if (Files.exists(sourceLoc)) {
+						fromCount.incrementAndGet();
+						files[index] = sourceLoc;
+					}
+					sourceLoc = source.root.resolve(toParent);
+					if (Files.exists(sourceLoc))
+						targetCount.incrementAndGet();
+				}
+			});
+			if (fromCount.intValue() == 0 || targetCount.intValue() == 0)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			
+			// since the from and target exist somewhere, go ahead and rename all froms to the targets
+			// note that we may have to create the target directory structure in some cases
+			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
+			runMultiSourceOperation(files, new SourceOp() {
+				public void run(int index, SourceFs source) {
+					Path realFrom = files[index];
+					Path realTo = source.root.resolve(to);
+					Path realTarget = parentOf(realTo);
+					try {
+						if (!Files.exists(realTarget, LinkOption.NOFOLLOW_LINKS)) {
+							// TODO: when creating realTarget directories, copy permissions and times from current versions
+							Files.createDirectories(realTarget);
+						}
+						FuselajFs.os_rename(realFrom, realTo);
+					}
+					catch (IOException | FilesystemException ioe) {
+						// TODO: handle this, see transaction note further up
+					}
+				}
+			});
+		}
+	}
 	
 	
 }
