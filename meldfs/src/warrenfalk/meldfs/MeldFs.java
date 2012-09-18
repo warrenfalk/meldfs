@@ -237,7 +237,7 @@ public class MeldFs {
 	}
 
 	/** Delete file at virtual path <code>vpath</code> */
-	public void delete(final Path vpath) throws FilesystemException {
+	public void rm(final Path vpath) throws FilesystemException {
 		final AtomicInteger deleted = new AtomicInteger(0);
 		final AtomicInteger found = new AtomicInteger(0);
 		runMultiSourceOperation(new SourceOp() {

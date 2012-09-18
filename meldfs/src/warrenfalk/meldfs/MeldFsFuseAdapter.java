@@ -439,7 +439,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void unlink(final Path path) throws FilesystemException {
-		meldfs.delete(path);
+		meldfs.rm(path);
 	}
 	
 	@Override
