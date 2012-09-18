@@ -263,6 +263,7 @@ public class MeldFs {
 			throw new FilesystemException(Errno.IOError);
 	}
 
+	/** Remove directory at virtual path <code>vpath</code> */
 	public void rmdir(final Path path) throws FilesystemException {
 		final AtomicInteger found = new AtomicInteger(0);
 		final AtomicInteger deleted = new AtomicInteger(0);
