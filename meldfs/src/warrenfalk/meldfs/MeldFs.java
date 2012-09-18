@@ -13,7 +13,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import warrenfalk.fuselaj.Errno;
-import warrenfalk.fuselaj.FileInfo;
 import warrenfalk.fuselaj.FilesystemException;
 
 public class MeldFs {
@@ -206,6 +205,33 @@ public class MeldFs {
 		if (parent == null)
 			parent = rootPath;
 		return parent;
+	}
+
+	/** Delete file at virtual path <code>vpath</code> */
+	public void delete(final Path vpath) throws FilesystemException {
+		final AtomicInteger deleted = new AtomicInteger(0);
+		final AtomicInteger found = new AtomicInteger(0);
+		runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(vpath);
+				if (Files.exists(sourceLoc, LinkOption.NOFOLLOW_LINKS)) {
+					found.incrementAndGet();
+					try {
+						Files.delete(sourceLoc);
+						deleted.incrementAndGet();
+					}
+					catch (IOException e) {
+						source.onIoException(e);
+					}
+				}
+			}
+		});
+		if (found.intValue() == 0)
+			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+		// TODO: try to throw the actual error that resulted
+		if (deleted.intValue() < found.intValue())
+			throw new FilesystemException(Errno.IOError);
 	}
 	
 	
