@@ -51,18 +51,6 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		fuseArgs = arglist.toArray(new String[arglist.size()]);
 	}
 	
-	/** Find the parent path of the given path.
-	 * Note: this is distinct from path.getParent() in that it returns the rootPath instead of null
-	 * @param path
-	 * @return the parent of path
-	 */
-	private Path parentOf(Path path) {
-		Path parent = path.getParent();
-		if (parent == null)
-			parent = rootPath;
-		return parent;
-	}
-	
 	/** Starts the fuse main loop
 	 * @return the exit value of the fuse main loop
 	 */
@@ -130,6 +118,9 @@ public class MeldFsFuseAdapter extends FuselajFs {
 				throw new RuntimeException("No mount point specified");
 			}
 			
+			if (!Files.isDirectory(mountPoint))
+				Files.createDirectories(mountPoint);
+			
 			MeldFsFuseAdapter mfs = new MeldFsFuseAdapter(mountPoint, debug, join(",", fuseOptions));
 			int exitCode = mfs.run();
 			System.exit(exitCode);
@@ -168,7 +159,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		Path dir = meldfs.getRealPath(path);
 		if (dir != null)
 			throw new FilesystemException(Errno.FileExists);
-		Path parent = parentOf(path);
+		Path parent = meldfs.parentOf(path);
 		Path parentDir = meldfs.getRealPath(parent);
 		if (parentDir == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
@@ -273,7 +264,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void symlink(Path targetOfLink, Path pathOfLink) throws FilesystemException {
-		Path realPath = meldfs.getRealPath(parentOf(pathOfLink));
+		Path realPath = meldfs.getRealPath(meldfs.parentOf(pathOfLink));
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		os_symlink(targetOfLink, realPath.resolve(pathOfLink.getFileName()));
@@ -291,7 +282,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		Path realFrom = files[index];
 		SourceFs fromSource = meldfs.getSource(index);
 		Path realTo = fromSource.root.resolve(to);
-		Path realToParent = parentOf(realTo);
+		Path realToParent = meldfs.parentOf(realTo);
 		// Sorry, can't figure out a way to do that consistently, the directory currently has to already exist on the same source fs
 		if (!Files.isDirectory(realToParent))
 			throw new FilesystemException(Errno.CrossDeviceLink);
@@ -300,8 +291,8 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void rename(final Path from, final Path to) throws FilesystemException {
-		final Path toParent = parentOf(to);
-		final Path fromParent = parentOf(from);
+		final Path toParent = meldfs.parentOf(to);
+		final Path fromParent = meldfs.parentOf(from);
 		// let's see if this is a simple rename
 		if (fromParent.equals(toParent)) {
 			// TODO: the following operation needs to be have some sort of transactional capability because if one of the operations fail, the rest need to be rolled back
@@ -352,7 +343,7 @@ public class MeldFsFuseAdapter extends FuselajFs {
 				public void run(int index, SourceFs source) {
 					Path realFrom = files[index];
 					Path realTo = source.root.resolve(to);
-					Path realTarget = parentOf(realTo);
+					Path realTarget = meldfs.parentOf(realTo);
 					try {
 						if (!Files.exists(realTarget, LinkOption.NOFOLLOW_LINKS)) {
 							// TODO: when creating realTarget directories, copy permissions and times from current versions
@@ -384,58 +375,9 @@ public class MeldFsFuseAdapter extends FuselajFs {
 	
 	@Override
 	protected void create(final Path path, int mode, FileInfo fi) throws FilesystemException {
-		// when creating a file, first find the existing file if any
-		// if it exists, and if this is a create_new, then fail, otherwise overwrite that one
-		// if it doesn't exist, get the youngest parent and create one there
-		final Path parent = parentOf(path);
-		final Path[] files = new Path[meldfs.getSourceCount()];
-		final Path[] parents = new Path[meldfs.getSourceCount()];
-		final long[] modTimes = new long[meldfs.getSourceCount()];
-		meldfs.runMultiSourceOperation(new SourceOp() {
-			public void run(int index, SourceFs source) {
-				Path sourceLoc = source.root.resolve(path);
-				if (Files.exists(sourceLoc)) {
-					try {
-						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
-						files[index] = sourceLoc;
-					}
-					catch (IOException ioe) {
-						source.onIoException(ioe);
-					}
-				}
-				sourceLoc = source.root.resolve(parent);
-				if (Files.exists(sourceLoc)) {
-					try {
-						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
-						parents[index] = sourceLoc;
-					}
-					catch (IOException ioe) {
-						source.onIoException(ioe);
-					}
-				}
-			}
-		});
-
-		// find the youngest existing file (if any), first
-		Path realPath = MeldFs.freshestFile(files, modTimes);
-		if (realPath != null) {
-			if (0 != (fi.getOpenFlags() & FileInfo.O_EXCL))
-				throw new FilesystemException(Errno.FileExists);
-		}
-		else {
-			// no existing file, find the youngest parent
-			Path openDir = MeldFs.freshestFile(parents, modTimes);
-			if (openDir == null)
-				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
-			realPath = openDir.resolve(path.getFileName());
-		}
-		try {
-			FileChannel channel = FileChannel.open(realPath, getJavaOpenOpts(fi.getOpenFlags()));
-			FileHandle.open(fi, channel);
-		}
-		catch (IOException ioe) {
-			throw new FilesystemException(ioe);
-		}
+		boolean failIfExists = 0 != (fi.getOpenFlags() & FileInfo.O_EXCL);
+		FileChannel channel = meldfs.create(path, failIfExists, getJavaOpenOpts(fi.getOpenFlags()));
+		FileHandle.open(fi, channel);
 	}
 
 	/**

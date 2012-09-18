@@ -1,18 +1,25 @@
 package warrenfalk.meldfs;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import warrenfalk.fuselaj.Errno;
+import warrenfalk.fuselaj.FileInfo;
 import warrenfalk.fuselaj.FilesystemException;
 
 public class MeldFs {
-	SourceFs[] sources;
-	ExecutorService threadPool;
+	final Path rootPath = FileSystems.getDefault().getPath(".").normalize();
+	private SourceFs[] sources;
+	private ExecutorService threadPool;
 
 	public MeldFs() throws IOException {
 		MeldFsProperties props = new MeldFsProperties();
@@ -132,5 +139,74 @@ public class MeldFs {
 	public SourceFs getSource(int index) {
 		return sources[index];
 	}
+
+	public FileChannel create(final Path path, boolean failIfExists, Set<? extends OpenOption> openOptions) throws FilesystemException {
+		// when creating a file, first find the existing file if any
+		// if it exists, and if this is a create_new, then fail, otherwise overwrite that one
+		// if it doesn't exist, get the youngest parent and create one there
+		final Path parent = parentOf(path);
+		final Path[] files = new Path[sources.length];
+		final Path[] parents = new Path[sources.length];
+		final long[] modTimes = new long[sources.length];
+		runMultiSourceOperation(new SourceOp() {
+			public void run(int index, SourceFs source) {
+				Path sourceLoc = source.root.resolve(path);
+				if (Files.exists(sourceLoc)) {
+					try {
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+						files[index] = sourceLoc;
+					}
+					catch (IOException ioe) {
+						source.onIoException(ioe);
+					}
+				}
+				sourceLoc = source.root.resolve(parent);
+				if (Files.exists(sourceLoc)) {
+					try {
+						modTimes[index] = Files.getLastModifiedTime(sourceLoc).toMillis();
+						parents[index] = sourceLoc;
+					}
+					catch (IOException ioe) {
+						source.onIoException(ioe);
+					}
+				}
+			}
+		});
+
+		// find the youngest existing file (if any), first
+		Path realPath = freshestFile(files, modTimes);
+		if (realPath != null) {
+			if (failIfExists)
+				throw new FilesystemException(Errno.FileExists);
+		}
+		else {
+			// no existing file, find the youngest parent and create the file there
+			// TODO: if this drive is nearing capacity, find a new drive
+			Path openDir = MeldFs.freshestFile(parents, modTimes);
+			if (openDir == null)
+				throw new FilesystemException(Errno.NoSuchFileOrDirectory);
+			realPath = openDir.resolve(path.getFileName());
+		}
+		try {
+			FileChannel channel = FileChannel.open(realPath, openOptions);
+			return channel;
+		}
+		catch (IOException ioe) {
+			throw new FilesystemException(ioe);
+		}
+	}
+	
+	/** Find the parent path of the given path.
+	 * Note: this is distinct from path.getParent() in that it returns the rootPath instead of null
+	 * @param path
+	 * @return the parent of path
+	 */
+	Path parentOf(Path path) {
+		Path parent = path.getParent();
+		if (parent == null)
+			parent = rootPath;
+		return parent;
+	}
+	
 	
 }
