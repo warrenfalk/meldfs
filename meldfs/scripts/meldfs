@@ -1,0 +1,10 @@
+#!/bin/bash
+
+cd `dirname $0`/../..
+PROJECT_HOME=.
+MELDFS_HOME=${PROJECT_HOME}/meldfs
+FUSELAJ_HOME=${PROJECT_HOME}/fuselaj
+RS_HOME=${PROJECT_HOME}/ReedSolomon
+export CLASSPATH=${MELDFS_HOME}/bin:${FUSELAJ_HOME}/bin:${MELDFS_HOME}/lib/commons-lang3-3.1.jar:${RS_HOME}/bin
+
+java -Djava.library.path=${FUSELAJ_HOME}/bin -Dfile.encoding=UTF-8 warrenfalk.meldfs.MeldFsCli $*
