@@ -173,6 +173,8 @@ public class MeldFsFuseAdapter extends FuselajFs {
 		String[] names;
 		if (fh.data instanceof Path) {
 			Set<String> items = meldfs.ls((Path)fh.data);
+			items.add(".");
+			items.add("..");
 			names = items.toArray(new String[items.size()]);
 			Arrays.sort(names);
 			fh.data = names;

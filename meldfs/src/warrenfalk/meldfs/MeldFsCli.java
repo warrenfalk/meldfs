@@ -144,6 +144,10 @@ public class MeldFsCli {
 				System.out.println(vpath + ":");
 			try {
 				Set<String> entrySet = meldfs.ls(vpath);
+				if (all) {
+					entrySet.add(".");
+					entrySet.add("..");
+				}
 				for (Iterator<String> i = entrySet.iterator(); i.hasNext(); ) {
 					String entry = i.next();
 					if (!all && entry.startsWith("."))

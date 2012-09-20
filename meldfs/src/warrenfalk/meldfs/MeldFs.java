@@ -380,10 +380,6 @@ public class MeldFs {
 					Path p = source.root.resolve(vdirpath);
 					if (Files.isDirectory(p)) {
 						try (DirectoryStream<Path> stream = Files.newDirectoryStream(p)) {
-							synchronized (items) {
-								items.add(".");
-								items.add("..");
-							}
 							for (Path item : stream) {
 								String itemName = item.getFileName().toString();
 								synchronized (items) {
