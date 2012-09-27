@@ -108,8 +108,10 @@ public class ChannelStriper {
 		}
 	}
 
-	/** Stripe all data from input, putting result in outputs **/
-	public void stripe(final ScatteringByteChannel input, final GatheringByteChannel[] outputs) throws IOException, InterruptedException {
+	/** Stripe all data from input, putting result in outputs, return number of data bytes written (i.e. excluding checksum bytes written) **/
+	public long stripe(final ScatteringByteChannel input, final GatheringByteChannel[] outputs) throws IOException, InterruptedException {
+		final AtomicLong written = new AtomicLong();
+		
 		// verify there is one output per source
 		if (outputs.length != dataSources + checksumSources)
 			throw new IllegalArgumentException("tried to use a " + dataSources + "x" + checksumSources + " striper with " + outputs.length + " outputs");
@@ -153,7 +155,9 @@ public class ChannelStriper {
 								}
 								int x = currentWriters.incrementAndGet();
 								start = System.nanoTime();
-								frame.matrix.writeColumn(column, output);
+								long size = frame.matrix.writeColumn(column, output);
+								if (column < dataSources)
+									written.addAndGet(size);
 								end = System.nanoTime();
 								if (x == 1)
 									writeStartTime = start;
@@ -241,6 +245,8 @@ public class ChannelStriper {
 			throw (Error)throwable;
 		else if (throwable != null)
 			throw new RuntimeException(throwable);
+		
+		return written.longValue();
 	}
 	
 }

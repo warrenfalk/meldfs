@@ -17,7 +17,20 @@ public class SourceFs {
 		return sources;
 	}
 
-	public void onIoException(IOException ioe) {
+	public void handleReadException(IOException ioe) {
 		// TODO implement
+		ioe.printStackTrace();
+	}
+	
+	@Override
+	public boolean equals(Object obj) {
+		if (obj instanceof SourceFs)
+			return ((SourceFs)obj).root.equals(root);
+		return false;
+	}
+
+	public void handleWriteException(IOException ioe) {
+		// TODO Implement
+		ioe.printStackTrace();
 	}
 }

@@ -61,8 +61,9 @@ public class StripeMatrix {
 	}
 	
 	/**
-	 * Blocks until the stripe is full or the EOF is reached.
-	 * If the value returned is less than <code>getTotalDataSize()</code> then eof was reached.
+	 * Reads from an unstriped source channel into the matrix.
+	 * <p>Blocks until all stripes are full or the EOF is reached.</p>
+	 * <p>(Does not return -1 on EOF, rather if the value returned is less than <code>getTotalDataSize()</code> then eof was reached.)</p>
 	 * @param channel
 	 * @return the number of bytes read
 	 * @throws IOException
@@ -88,6 +89,26 @@ public class StripeMatrix {
 		return total;
 	}
 	
+	/**
+	 * Reads from one column of a striped source into the matrix.
+	 * @param column
+	 * @param channel
+	 * @return
+	 * @throws IOException
+	 */
+	public long readColumn(int column, ScatteringByteChannel channel) throws IOException {
+		ByteBuffer[] blocks = columns[column];
+		return channel.read(blocks);
+	}
+	
+	/**
+	 * Writes to one column of a stripe from the matrix.
+	 * <p>Blocks until all data is written</p>
+	 * @param column
+	 * @param channel
+	 * @return
+	 * @throws IOException
+	 */
 	public long writeColumn(int column, GatheringByteChannel channel) throws IOException {
 		ByteBuffer[] blocks = columns[column];
 		long all = 0;
@@ -99,6 +120,16 @@ public class StripeMatrix {
 			total += bytes;
 		}
 		return total;
+	}
+	
+	/**
+	 * Writes from the matrix to an unstriped destination.
+	 * @param channel
+	 * @return
+	 * @throws IOException
+	 */
+	public long writeStripes(GatheringByteChannel channel) throws IOException {
+		return channel.write(stripes);
 	}
 
 	public void calculate(StripeCoder stripeCoder, int calcMask) {

@@ -1,6 +1,7 @@
 package warrenfalk.meldfs;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
@@ -17,14 +18,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import warrenfalk.fuselaj.Errno;
 import warrenfalk.fuselaj.FilesystemException;
 import warrenfalk.fuselaj.FuselajFs;
+import warrenfalk.fuselaj.Stat;
 
 public class MeldFs {
 	final Path rootPath = FileSystems.getDefault().getPath(".").normalize();
 	private SourceFs[] sources;
-	private ExecutorService threadPool;
+	ExecutorService threadPool;
 	ThreadLocal<FilesystemException[]> _exceptions = new ThreadLocal<FilesystemException[]>();
 
 	public MeldFs() throws IOException {
+		System.loadLibrary("fuselaj");
 		MeldFsProperties props = new MeldFsProperties();
 		Path[] sources = props.getSources();
 		this.sources = SourceFs.fromPaths(sources);
@@ -118,7 +121,7 @@ public class MeldFs {
 						rpaths[index] = sourceLoc;
 					}
 					catch (IOException ioe) {
-						source.onIoException(ioe);
+						source.handleReadException(ioe);
 					}
 				}
 			}
@@ -186,7 +189,7 @@ public class MeldFs {
 						files[index] = sourceLoc;
 					}
 					catch (IOException ioe) {
-						source.onIoException(ioe);
+						source.handleReadException(ioe);
 					}
 				}
 				sourceLoc = source.root.resolve(parent);
@@ -196,7 +199,7 @@ public class MeldFs {
 						parents[index] = sourceLoc;
 					}
 					catch (IOException ioe) {
-						source.onIoException(ioe);
+						source.handleReadException(ioe);
 					}
 				}
 			}
@@ -252,7 +255,8 @@ public class MeldFs {
 						deleted.incrementAndGet();
 					}
 					catch (IOException e) {
-						source.onIoException(e);
+						// calling read exception here because read() is the more serious exception and this *could* be a read issue
+						source.handleReadException(e);
 					}
 				}
 			}
@@ -390,7 +394,7 @@ public class MeldFs {
 					}
 				}
 				catch (IOException ioe) {
-					source.onIoException(ioe);
+					source.handleReadException(ioe);
 				}
 			}
 		});
@@ -431,9 +435,9 @@ public class MeldFs {
 			throw new FilesystemException(Errno.CrossDeviceLink);
 		FuselajFs.os_link(realFrom, realTo);
 	}
-
-	public FileChannel open(Path path, Set<? extends OpenOption> openOptions) throws FilesystemException {
-		Path realPath = getRealPath(path);
+	
+	public FileChannel open(Path vpath, OpenOption...openOptions) throws FilesystemException {
+		Path realPath = getRealPath(vpath);
 		if (realPath == null)
 			throw new FilesystemException(Errno.NoSuchFileOrDirectory);
 		try {
@@ -443,6 +447,48 @@ public class MeldFs {
 			throw new FilesystemException(ioe);
 		}
 	}
+
+	public FileChannel open(Path vpath, Set<? extends OpenOption> openOptions) throws FilesystemException {
+		return open(vpath, openOptions.toArray(new OpenOption[openOptions.size()]));
+	}
+
+	public boolean isDirectory(Path vpath) throws FilesystemException {
+		Path rpath = getRealPath(vpath);
+		return Files.isDirectory(rpath, LinkOption.NOFOLLOW_LINKS);
+	}
 	
+	public boolean isSymlink(Path vpath) throws FilesystemException {
+		Path rpath = getRealPath(vpath);
+		return Files.isSymbolicLink(rpath);
+	}
+
+	/**
+	 * Creates a copy of this directory in the .stripe region of every source
+	 * @param vpath
+	 * @throws FilesystemException
+	 */
+	public void createStripeDirs(final Path vpath) throws FilesystemException {
+		runMultiSourceOperation(new SourceOp() {
+			@Override
+			public void run(int index, SourceFs source) throws FilesystemException {
+				Path stripeFolder = source.root.resolve(".stripe");
+				createStripeDirs(vpath, stripeFolder);
+				// TODO: copy other attributes
+			}
+			
+			private void createStripeDirs(final Path vpath, Path stripeFolder) throws FilesystemException {
+				Path rpath = getRealPath(vpath);
+				Path spath = stripeFolder.resolve(vpath);
+				if (Files.isDirectory(spath, LinkOption.NOFOLLOW_LINKS))
+					return;
+				Path sparent = spath.getParent();
+				if (!Files.isDirectory(sparent, LinkOption.NOFOLLOW_LINKS))
+					createStripeDirs(parentOf(vpath), stripeFolder);
+				Stat stat = new Stat(ByteBuffer.allocateDirect(0x100));
+				FuselajFs.os_lstat(rpath, stat);
+				FuselajFs.os_mkdir(spath, stat.getMode());
+			}
+		});
+	}
 	
 }
